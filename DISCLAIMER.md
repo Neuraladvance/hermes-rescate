@@ -1,5 +1,19 @@
 # Aviso legal y limitación de responsabilidad
 
+## 0. Responsabilidad única y exclusiva del usuario
+
+**EL USO DE ESTE PROGRAMA ES BAJO LA RESPONSABILIDAD ÚNICA Y EXCLUSIVA DE QUIEN LO
+EJECUTA.** Antes de usarlo por primera vez, el programa muestra este aviso y exige una
+respuesta explícita: **ACEPTO** o **REHUSO**. Si se rehúsa, el programa se cierra y no
+ejecuta ninguna acción. La decisión queda registrada en `logs/aceptaciones.jsonl`
+(fecha, equipo, usuario y versión), de modo que siempre puede saberse quién aceptó y
+cuándo en cada máquina.
+
+Nadie más —ni el autor, ni los colaboradores, ni el proveedor del modelo de IA— responde
+de las consecuencias del uso: ni de los daños en el equipo, ni de la pérdida de datos,
+ni del uso indebido en equipos ajenos, ni del incumplimiento de normas internas o
+legales en que se incurra al ejecutarlo.
+
 **HERMES-RESCATE** es un proyecto de [Neuraladvance.net](https://neuraladvance.net)
 publicado con licencia MIT. Léelo antes de usarlo en un equipo que no sea tuyo.
 

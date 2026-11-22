@@ -16,7 +16,11 @@ Uso:
 Opciones: --sin-lento (omite Defender/BitLocker/actualizaciones), --si (no preguntar)
 """
 import ctypes
+import datetime
+import getpass
+import json
 import os
+import socket
 import sys
 
 RAIZ_APP = os.path.dirname(os.path.abspath(__file__))
@@ -27,6 +31,7 @@ from nucleo import auditoria, diagnostico, informe, reparaciones, util  # noqa: 
 
 C = util
 ANCHO = 78
+VERSION = "1.0"
 
 
 # ------------------------------------------------------------------ pintado
@@ -441,6 +446,10 @@ def cabecera():
 
 # ------------------------------------------------------------------ aviso legal
 TEXTO_AVISO = """
+  EL USO DE ESTE PROGRAMA ES BAJO LA RESPONSABILIDAD ÚNICA Y EXCLUSIVA DE QUIEN
+  LO EJECUTA. Nadie más responde de lo que se haga con él ni de las consecuencias
+  en el equipo.
+
   HERMES-RESCATE es un proyecto de Neuraladvance.net (https://neuraladvance.net),
   publicado con licencia MIT.
 
@@ -463,7 +472,7 @@ TEXTO_AVISO = """
 
 
 def menu_aviso():
-    titulo("Aviso legal y créditos")
+    titulo("DISCLAIMER · Aviso legal y créditos")
     print(TEXTO_AVISO)
     ruta = os.path.join(util.RAIZ, "DISCLAIMER.md")
     if os.path.exists(ruta):
@@ -475,6 +484,104 @@ def menu_aviso():
                 mal("No se pudo abrir: %s" % exc)
     else:
         ojo("No encuentro DISCLAIMER.md en el USB (debería estar junto a Rescate.bat).")
+    ultimas = _aceptaciones()[-1:]
+    if ultimas:
+        fila = ultimas[0]
+        print("  Última decisión registrada: %s · %s · %s"
+              % (fila.get("decision"), fila.get("equipo_nombre"), fila.get("fecha")))
+
+
+def _huella_equipo():
+    """Equipo + usuario, para no repetir el aviso en la misma máquina."""
+    try:
+        nombre = socket.gethostname()
+    except Exception:
+        nombre = "desconocido"
+    try:
+        usuario = getpass.getuser()
+    except Exception:
+        usuario = "desconocido"
+    return "%s|%s" % (nombre.lower(), usuario.lower())
+
+
+def _aceptaciones():
+    try:
+        with open(util.RUTA_ACEPTACIONES, "r", encoding="utf-8") as f:
+            return [json.loads(linea) for linea in f if linea.strip()]
+    except Exception:
+        return []
+
+
+def _ya_aceptado():
+    huella = _huella_equipo()
+    for fila in _aceptaciones():
+        if (fila.get("equipo") == huella and fila.get("version") == VERSION
+                and fila.get("decision") == "ACEPTO"):
+            return True
+    return False
+
+
+def _registrar_aceptacion(decision, origen="inicio"):
+    """Deja constancia en logs/aceptaciones.jsonl (una línea JSON por decisión)."""
+    os.makedirs(util.LOGS, exist_ok=True)
+    fila = {
+        "fecha": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "equipo": _huella_equipo(),
+        "equipo_nombre": socket.gethostname(),
+        "usuario": getpass.getuser(),
+        "version": VERSION,
+        "decision": decision,
+        "origen": origen,
+        "carpeta": util.RAIZ,
+    }
+    try:
+        with open(util.RUTA_ACEPTACIONES, "a", encoding="utf-8") as f:
+            f.write(json.dumps(fila, ensure_ascii=False) + "\n")
+    except Exception as exc:
+        ojo("No se pudo registrar la decisión en el log: %s" % exc)
+    return fila
+
+
+def puerta_disclaimer():
+    """Muestra el aviso y exige ACEPTO antes de usar el programa.
+
+    Devuelve True si se puede continuar. Si ya hay un ACEPTO registrado para este
+    equipo y esta versión, no vuelve a preguntar.
+    """
+    if _ya_aceptado():
+        return True
+    linea = C.color("  " + "═" * (ANCHO - 2), C.AMARILLO)
+    print()
+    print(linea)
+    print(C.color("  DISCLAIMER · AVISO LEGAL", C.NEGRITA + (C.AMARILLO or "")))
+    print(C.color("  LEE ESTO ANTES DE USAR EL PROGRAMA", C.AMARILLO))
+    print(linea)
+    print(TEXTO_AVISO)
+    print(C.color("  ── No se puede continuar sin aceptar. ──", C.GRIS))
+    ruta = os.path.join(util.RAIZ, "DISCLAIMER.md")
+    if os.path.exists(ruta):
+        print("  Texto completo: %s" % ruta)
+    print()
+    print("  Escribe %s para continuar o %s para salir."
+          % (C.color("ACEPTO", C.VERDE), C.color("REHUSO", C.ROJO)))
+    while True:
+        try:
+            respuesta = input(C.color("  › ", C.NEGRITA)).strip().upper()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            respuesta = "REHUSO"
+        if respuesta in ("ACEPTO", "A", "SI", "SÍ", "S"):
+            _registrar_aceptacion("ACEPTO")
+            bien("Aceptado. Registrado en logs/aceptaciones.jsonl")
+            print()
+            return True
+        if respuesta in ("REHUSO", "R", "NO", "N", ""):
+            _registrar_aceptacion("REHUSO")
+            mal("Rehusado: el programa no se usará.")
+            print("  Decisión registrada en logs/aceptaciones.jsonl")
+            print()
+            return False
+        print("  Respuesta no válida: escribe ACEPTO o REHUSO.")
 
 
 def menu_principal():
@@ -493,7 +600,7 @@ def menu_principal():
         print("  6. Catálogo de reparaciones")
         print("  7. Hablar con la IA")
         print("  8. Abrir la carpeta de informes")
-        print("  9. Aviso legal y créditos")
+        print("  9. DISCLAIMER · Aviso legal y créditos")
         print("  0. Salir")
         try:
             opcion = input(C.color("\n  Opción: ", C.NEGRITA)).strip().lower()
@@ -563,11 +670,17 @@ def main():
     sin_lento = "--sin-lento" in argumentos
     automatico = "--si" in argumentos or "--auto" in argumentos
 
-    if "--estado" in argumentos:
-        menu_estado()
-        return 0
     if "--aviso" in argumentos:
         menu_aviso()
+        return 0
+    if "--acepto" in argumentos:
+        _registrar_aceptacion("ACEPTO", origen="cli")
+        bien("Aceptación del DISCLAIMER registrada para este equipo.")
+        return 0
+    if not puerta_disclaimer():
+        return 2
+    if "--estado" in argumentos:
+        menu_estado()
         return 0
     if "--ia-probar" in argumentos:
         from nucleo import ia

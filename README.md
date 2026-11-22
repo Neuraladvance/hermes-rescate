@@ -118,6 +118,19 @@ antes `config/config.json`. El repositorio ya lo ignora (`.gitignore`), así que
 se publica.
 
 
+## Antes de usarlo: DISCLAIMER obligatorio
+
+La primera vez que se ejecuta en un equipo, el programa muestra el aviso legal y **no
+deja continuar sin una respuesta explícita**: `ACEPTO` o `REHUSO`. Si se rehúsa, se
+cierra sin ejecutar nada. La decisión se registra en `logs/aceptaciones.jsonl` (fecha,
+equipo, usuario y versión), así que en cada máquina queda constancia de quién aceptó y
+cuándo. El aviso completo está en [DISCLAIMER.md](DISCLAIMER.md).
+
+El uso del programa es bajo la **responsabilidad única y exclusiva** de quien lo ejecuta.
+
+- `Rescate.bat --aviso` — volver a leerlo
+- `Rescate.bat --acepto` — aceptar sin preguntas (instalaciones desatendidas)
+
 ## Cómo está hecho
 
 - `runtime/python/` — Python 3.11.9 embebido (amd64). No se instala, no toca el sistema.

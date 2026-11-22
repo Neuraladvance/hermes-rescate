@@ -21,6 +21,7 @@ def ruta(*partes):
 INFORMES = ruta("informes")
 LOGS = ruta("logs")
 CONFIG = ruta("config", "config.json")
+RUTA_ACEPTACIONES = ruta("logs", "aceptaciones.jsonl")
 PS_DIR = os.path.join(APP_DIR, "ps")
 
 for _d in (INFORMES, LOGS):
