@@ -114,17 +114,22 @@ Si quieres el chat, crea la tuya —gratis, sin tarjeta, un minuto—:
 2. Guárdala con `Rescate.bat --ia-clave` (no se ve al escribirla) o pégala en `config/config.json`
 3. Comprueba la cadena de modelos: `Rescate.bat --ia-probar`
 
-### Guardarla cifrada (recomendado en un USB)
+### La clave se guarda sin contraseña
 
-Un USB se pierde. Si eliges cifrar la clave al guardarla, el programa escribe
-`config/ia.dat` con **ChaCha20 + HMAC-SHA256** y clave derivada por **scrypt** (solo
-biblioteca estándar, sin dependencias) y deja `config/config.json` sin la clave. Sin la
-contraseña ese fichero no se puede abrir: se pide al usar el chat y se descifra solo en
-memoria. `config/ia.dat` está en `.gitignore`, así que nunca se publica.
+Al guardarla con `Rescate.bat --ia-clave` queda en `config/config.json` y el chat la usa
+sin pedir nada: cero fricción, que es el objetivo de un USB de trabajo.
 
-- `Rescate.bat --ia-clave` — guardar (y opcionalmente cifrar) una clave
-- `Rescate.bat --ia-cifrar` — cifrar la que ya está en claro
-- Si olvidas la contraseña: borra `config/ia.dat` y crea otra clave. No hay recuperación.
+**Protegerla con contraseña es opcional.** Si el USB puede perderse y no quieres que otro
+gaste tu cuota gratuita, `Rescate.bat --ia-cifrar` escribe `config/ia.dat` con **ChaCha20 +
+HMAC-SHA256** y clave derivada por **scrypt** (solo biblioteca estándar, sin dependencias) y
+deja `config/config.json` sin la clave. Sin la contraseña ese fichero no se puede abrir: se
+pide al usar el chat y se descifra solo en memoria. Si prefieres no escribirla, **Enter en
+blanco** y el programa sigue sin IA. `config/ia.dat` está en `.gitignore`.
+
+- `Rescate.bat --ia-clave` — guardar una clave (sin contraseña salvo que la pidas)
+- `Rescate.bat --ia-cifrar` — protegerla con contraseña más adelante
+- `Rescate.bat --ia-contrasena` — cambiar esa contraseña (conserva la caducidad)
+- Si olvidas la contraseña: borra `config/ia.dat` y guarda otra vez la clave.
 
 **Sin clave, todo lo demás funciona igual**: la auditoría, el diagnóstico, las
 reparaciones y el informe no usan IA. Si compartes tu USB con otra persona, borra

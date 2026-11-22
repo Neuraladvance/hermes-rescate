@@ -439,7 +439,7 @@ def _desbloquear_ia():
                   "(todo lo demás funciona).", C.GRIS))
     for intento in (1, 2, 3):
         try:
-            password = getpass.getpass("  contraseña del USB (%d/3): " % intento)
+            password = getpass.getpass("  contraseña del USB (%d/3): " % intento).strip()
         except (EOFError, KeyboardInterrupt):
             print()
             return None
@@ -534,7 +534,8 @@ def _guia_clave(cfg=None):
     endpoint = (cfg or {}).get("endpoint") or "https://openrouter.ai/api/v1"
     ia.guardar_config(endpoint=endpoint, clave=clave)
     bien("Guardada en config/config.json")
-    if preguntar("¿Cifrarla con contraseña? (recomendado si el USB puede perderse)", "s"):
+    print("  Se guarda sin contraseña: al abrir el chat no se pide nada.")
+    if preguntar("¿Protegerla con contraseña? (opcional, solo si el USB puede perderse)", "n"):
         if _cifrar_clave_pedida(clave):
             print()
             cfg = _desbloquear_ia() or ia.config()
@@ -920,7 +921,8 @@ def main():
             return 1
         ia.guardar_config(clave=clave)
         bien("Guardada en config/config.json")
-        if preguntar("¿Cifrarla con contraseña (recomendado en un USB)?", "s"):
+        print("  Se guarda sin contraseña. Si quieres protegerla: Rescate.bat --ia-cifrar")
+        if preguntar("¿Protegerla con contraseña? (opcional)", "n"):
             _cifrar_clave_pedida(clave)
         return 0
     if "--ia-cifrar" in argumentos:

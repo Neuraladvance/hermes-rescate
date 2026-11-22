@@ -18,18 +18,20 @@ Para ejecuciones desatendidas (scripts) se puede responder de antemano:
 Para volver a leer el aviso cuando quieras:
     Rescate.bat --aviso
 
-CLAVE DE IA CIFRADA (contraseña del USB)
-----------------------------------------
-La clave de OpenRouter va cifrada en config\ia.dat y se pide una contraseña al
-usarla. Sin ella todo funciona menos el chat de IA.
+CLAVE DE IA (sin contraseña)
+----------------------------
+La clave de OpenRouter se guarda en config\config.json y se usa al abrir el chat, sin
+pedir nada. Los modelos son los gratuitos: cuestan 0 y no hace falta tarjeta.
 
-    Dejar en blanco en el prompt  →  sigue sin IA (nada se bloquea)
-    Rescate.bat --ia-contrasena   →  cambiar la contraseña (pide la actual)
-    Rescate.bat --ia-clave        →  guardar otra clave desde cero
+    Rescate.bat --ia-clave       →  pegar una clave (la primera vez)
+    Rescate.bat --ia-probar      →  comprobar que responde
 
-La contraseña está apuntada en la carpeta KEYS del técnico
-(hermes-rescate-USB-contrasena_<fecha>.txt). Si se olvida del todo: borrar
-config\ia.dat y volver a guardar la clave con --ia-clave.
+Protegerla es OPCIONAL (solo si el USB puede perderse y no quieres que nadie use tu
+cuota gratuita):
+
+    Rescate.bat --ia-cifrar      →  cifrarla con contraseña (config\ia.dat)
+    Rescate.bat --ia-contrasena  →  cambiar esa contraseña
+    Dejar en blanco en el prompt →  sigue sin IA, nada se bloquea
 
 SIMULACIÓN COMPLETA (buscar fallos sin tocar el equipo)
 ------------------------------------------------------
