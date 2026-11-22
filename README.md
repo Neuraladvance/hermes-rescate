@@ -95,6 +95,29 @@ contraseña que uses en otro sitio.
 `endpoint`, `modelo` y `clave` de cualquier API compatible con OpenAI. También admite
 las variables de entorno `RESCATE_IA_ENDPOINT`, `RESCATE_IA_MODELO` y `RESCATE_IA_CLAVE`.
 
+### Cada técnico, su clave gratuita (aquí no viaja ninguna)
+
+Este repositorio **no incluye ninguna clave, y no puede incluirla**:
+
+- OpenRouter exige clave **incluso para sus modelos `:free`** (sin clave responde 401).
+  No hay acceso anónimo.
+- Las claves gratuitas son personales y llevan topes por usuario. Una clave compartida
+  en un repositorio público la cosechan los bots en horas, se agota el tope y deja de
+  funcionar para todos; además incumple las condiciones del proveedor.
+- Tampoco está pensado para meter una clave de pago.
+
+Si quieres el chat, crea la tuya —gratis, sin tarjeta, un minuto—:
+
+1. https://openrouter.ai/keys → **Create key**
+2. Pégala en `config/config.json` (o desde el menú, opción 7)
+3. Comprueba la cadena de modelos: `Rescate.bat --ia-probar`
+
+**Sin clave, todo lo demás funciona igual**: la auditoría, el diagnóstico, las
+reparaciones y el informe no usan IA. Si compartes tu USB con otra persona, borra
+antes `config/config.json`. El repositorio ya lo ignora (`.gitignore`), así que nunca
+se publica.
+
+
 ## Cómo está hecho
 
 - `runtime/python/` — Python 3.11.9 embebido (amd64). No se instala, no toca el sistema.

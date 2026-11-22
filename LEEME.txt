@@ -90,6 +90,20 @@ En config/config.json:
 
 La clave se queda en el USB: si el USB se pierde, revócala.
 
+SIN CLAVE TAMBIÉN SE USA
+------------------------
+El programa no incluye ninguna clave y no puede incluirla: OpenRouter exige clave
+incluso para los modelos gratuitos (sin clave responde error 401). Las claves
+gratuitas son personales y llevan topes por usuario; una clave compartida en un
+repositorio público se agota en horas y la retiran.
+Cada técnico crea la suya, gratis y sin tarjeta, en openrouter.ai > Keys, la pega
+en config/config.json (o desde el menú, opción 7) y comprueba con:
+    Rescate.bat --ia-probar
+Sin clave, TODO lo demás funciona igual: auditar, diagnosticar, reparar, informe,
+actualizaciones, drivers y WiFi no usan IA.
+Si dejas el USB a otra persona, borra antes config/config.json.
+
+
 QUÉ NO HACE (a propósito)
 -------------------------
 · No borra documentos, fotos ni correo. Solo temporales, caché y papelera.
