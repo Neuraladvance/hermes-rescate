@@ -36,7 +36,7 @@ rango reservado para documentación (RFC 5737).*
 | **1. Revisar** | 39 bloques en ~30 s: hardware, discos (SMART y desgaste), batería real (mWh de diseño vs reales), licencia, Defender, cortafuegos, BitLocker, TPM, Arranque seguro, actualizaciones pendientes, errores del registro, cuelgues y pantallazos, dispositivos con error, servicios caídos, espacio recuperable, red y DNS, WinRE y puntos de restauración. Genera **informe HTML imprimible**, Markdown y JSON con los datos crudos. |
 | **2. Reparar** | Aplica solo lo que el diagnóstico justifica. Separa lo seguro de lo que cambia configuración (eso se pregunta una a una) y **verifica** el resultado después. |
 | **3. WiFi del técnico** | Crea el perfil WLAN y conecta el equipo al hotspot configurado, para poder descargar actualizaciones. |
-| **4. Actualizaciones** | Instala todas las pendientes de Windows Update una a una, con progreso y reinicio final. |
+| **4. Actualizaciones** | **Primero consulta** qué hay pendiente sin instalar nada y lo separa en tres grupos: actualizaciones, controladores y firmware/BIOS. Pregunta grupo a grupo; el firmware viene **desactivado** porque si se corta la corriente a mitad el portátil puede quedar sin arrancar. Instala uno a uno con progreso y avisa del reinicio. |
 | **5. Programas** | Catálogo de habituales (Chrome, 7-Zip, VLC, Adobe Reader, LibreOffice, AnyDesk, CPU-Z, CrystalDiskInfo…) o búsqueda libre por `winget`. |
 | **6. Catálogo** | 41 reparaciones en 8 categorías, con nivel de riesgo y requisitos (administrador, internet). |
 | **7. IA** | Opcional. Explica los hallazgos y propone acciones, pero **solo puede ejecutar las del catálogo**, con confirmación, y seudonimiza el equipo antes de enviar. |
@@ -70,8 +70,10 @@ Rescate.bat --auto                 auditoría + reparaciones seguras
 Rescate.bat --reparar sfc_scan     una acción (o varias separadas por coma)
 Rescate.bat --listar               catálogo completo con identificadores
 Rescate.bat --wifi                 conectar al hotspot configurado
-Rescate.bat --actualizar           instalar actualizaciones de Windows
+Rescate.bat --buscar-actualizaciones  consultar qué hay pendiente (no instala)
+Rescate.bat --actualizar           instalar actualizaciones y controladores
 Rescate.bat --drivers              solo controladores
+Rescate.bat --drivers --con-firmware   incluir BIOS/UEFI (enchufado, con batería)
 Rescate.bat --instalar 7zip.7zip   instalar un programa de winget
 Rescate.bat --estado               comprobación rápida del entorno
 ```

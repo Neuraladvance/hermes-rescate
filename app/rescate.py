@@ -164,7 +164,7 @@ def aplicar_recomendadas(datos, hallazgos, resumen, auto=False):
             if auto:
                 continue
             r = reparaciones.obtener(rid)
-            if preguntar("¿Aplicar «%s»? %s" % (r["nombre"], C.color(r["cuando"], C.GRIS), "n"), "n"):
+            if preguntar("¿Aplicar «%s»? %s" % (r["nombre"], C.color(r["cuando"], C.GRIS)), "n"):
                 seleccion.append(rid)
     for rid in manual:
         r = reparaciones.obtener(rid)
@@ -245,18 +245,83 @@ def menu_wifi():
                 bien("Guardada (ofuscada) en config/wifi.json")
 
 
+def _grupo_de(elemento):
+    """Normaliza el tipo que devuelve PowerShell (singular) al nombre del grupo."""
+    tipo = str(elemento.get("tipo") or "actualizacion").strip().lower()
+    return {"actualizacion": "actualizaciones", "actualizaciones": "actualizaciones",
+            "controlador": "controladores", "controladores": "controladores",
+            "firmware": "firmware"}.get(tipo, "actualizaciones")
+
+
+def _listar_grupo(titulo_grupo, elementos, nota=None):
+    """Pinta un grupo de actualizaciones con su tamaño."""
+    if not elementos:
+        return
+    total_mb = sum(float(e.get("mb") or 0) for e in elementos)
+    print(C.color("\n  %s (%d · %.1f MB)" % (titulo_grupo, len(elementos), total_mb), C.NEGRITA))
+    for e in elementos[:8]:
+        print("    · %-62s %6.1f MB" % (str(e.get("titulo"))[:62], float(e.get("mb") or 0)))
+    if len(elementos) > 8:
+        print(C.color("    … y %d más" % (len(elementos) - 8), C.GRIS))
+    if nota:
+        print(C.color("    " + nota, C.GRIS))
+
+
 def menu_actualizar():
+    """Busca primero, enseña qué hay por grupos y pregunta grupo a grupo.
+
+    El firmware (BIOS/UEFI) va aparte y por defecto NO se instala: es lo único que
+    puede dejar un portátil sin arrancar si se corta la corriente a mitad.
+    """
     from nucleo import instalador
     titulo("Actualizaciones de Windows")
-    if not es_admin():
-        mal("Hace falta ejecutar el programa como administrador.")
-        if preguntar("¿Reiniciar ahora con permisos de administrador?", "s"):
-            relanzar_admin()
+    print("  Primero se consulta qué hay pendiente, sin instalar nada.")
+    paso("Buscando en Windows Update...")
+    consulta = instalador.buscar_actualizaciones()
+    if consulta.get("error"):
+        mal(consulta["error"])
         return
-    if not preguntar("Se van a descargar e instalar TODAS las actualizaciones pendientes. "
-                     "Puede tardar de 20 minutos a varias horas. ¿Continuar?", "n"):
+    pendientes = consulta.get("pendientes") or []
+    if not pendientes:
+        bien("No hay nada pendiente. Este equipo está al día.")
         return
-    resultado = instalador.actualizar_windows(aviso=paso)
+
+    grupos = {nombre: [] for nombre in ("actualizaciones", "controladores", "firmware")}
+    for elemento in pendientes:
+        grupos[_grupo_de(elemento)].append(elemento)
+
+    print()
+    _listar_grupo("Actualizaciones de Windows", grupos.get("actualizaciones"))
+    _listar_grupo("Controladores", grupos.get("controladores"),
+                  "Los de Windows Update son genéricos: si un dispositivo funciona bien, "
+                  "puede ir peor después.")
+    _listar_grupo("Firmware (BIOS/UEFI)", grupos.get("firmware"),
+                  "OJO: si se corta la corriente durante la instalación, el equipo puede "
+                  "quedar sin arrancar. Portátil enchufado y con batería.")
+
+    elegir_actualizaciones = elegir_controladores = elegir_firmware = False
+    if grupos.get("actualizaciones"):
+        elegir_actualizaciones = preguntar(
+            "¿Instalar las %d actualizaciones de Windows? (recomendado)"
+            % len(grupos["actualizaciones"]), "s")
+    if grupos.get("controladores"):
+        elegir_controladores = preguntar(
+            "¿Instalar los %d controladores? (solo si hay un problema con ese dispositivo)"
+            % len(grupos["controladores"]), "n")
+    if grupos.get("firmware"):
+        elegir_firmware = preguntar(
+            "¿Instalar el firmware/BIOS? Deja el portátil ENCHUFADO y con más del 50%% de "
+            "batería, y no lo apagues hasta que termine", "n")
+
+    if not (elegir_actualizaciones or elegir_controladores or elegir_firmware):
+        print("\n  No se ha seleccionado nada: no se toca el equipo.")
+        return
+
+    resultado = instalador.actualizar_windows(
+        aviso=paso,
+        solo_actualizaciones=elegir_actualizaciones and not (elegir_controladores or elegir_firmware),
+        solo_drivers=(elegir_controladores or elegir_firmware) and not elegir_actualizaciones,
+        excluir_firmware=not elegir_firmware)
     titulo("Resultado de Windows Update")
     if resultado.get("error"):
         mal(resultado["error"])
@@ -841,16 +906,44 @@ def main():
     if "--wifi" in argumentos:
         menu_wifi()
         return 0
+    if "--buscar-actualizaciones" in argumentos:
+        from nucleo import instalador
+        titulo("Windows Update · solo consulta")
+        consulta = instalador.buscar_actualizaciones()
+        if consulta.get("error"):
+            mal(consulta["error"])
+            return 1
+        pendientes = consulta.get("pendientes") or []
+        if not pendientes:
+            bien("No hay nada pendiente.")
+            return 0
+        for nombre in ("actualizaciones", "controladores", "firmware"):
+            elementos = [e for e in pendientes if _grupo_de(e) == nombre]
+            _listar_grupo({"actualizaciones": "Actualizaciones de Windows",
+                           "controladores": "Controladores",
+                           "firmware": "Firmware (BIOS/UEFI)"}[nombre], elementos)
+        print()
+        print("  Total: %d elementos · %.1f MB"
+              % (len(pendientes), sum(float(e.get("mb") or 0) for e in pendientes)))
+        print("  (no se ha instalado nada)")
+        return 0
     if "--actualizar" in argumentos or "--drivers" in argumentos:
         from nucleo import instalador
         solo_drivers = "--drivers" in argumentos
-        paso("Instalando %s (puede tardar mucho)..." % ("controladores" if solo_drivers else "actualizaciones"))
-        resultado = instalador.actualizar_windows(solo_drivers=solo_drivers, aviso=paso)
+        con_firmware = "--con-firmware" in argumentos
+        if con_firmware and not solo_drivers:
+            ojo("El firmware solo se instala con --drivers --con-firmware.")
+        paso("Instalando %s (puede tardar mucho)..."
+             % ("controladores" if solo_drivers else "actualizaciones y controladores"))
+        resultado = instalador.actualizar_windows(solo_drivers=solo_drivers, aviso=paso,
+                                                  excluir_firmware=not con_firmware)
         if resultado.get("error"):
             mal(resultado["error"])
             return 1
         bien("%d instaladas, %d con problemas"
              % (len(resultado.get("hechas") or []), len(resultado.get("fallidas") or [])))
+        if resultado.get("excluir_firmware"):
+            ojo("Firmware/BIOS excluido a propósito (usa --con-firmware para incluirlo).")
         return 0
     if "--instalar" in argumentos:
         from nucleo import instalador

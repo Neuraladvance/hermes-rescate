@@ -87,23 +87,13 @@ def instalar(paquete_id, timeout=1800):
 
 
 # ------------------------------------------------------------------ Windows Update
-def actualizar_windows(solo_drivers=False, aviso=None, maximo_s=7200):
-    """Instala actualizaciones con actualizar.ps1, mostrando progreso.
-
-    Devuelve dict con el resultado final del script.
-    """
-    aviso = aviso or (lambda *_: None)
-    carpeta = util.ruta("logs", "tmp")
-    os.makedirs(carpeta, exist_ok=True)
-    salida = os.path.join(carpeta, "actualizar.json")
+def _ejecutar_ps(salida, argumentos_extra, aviso, maximo_s, seguir_fase=True):
+    """Lanza actualizar.ps1 y devuelve el JSON final. Compartido por buscar e instalar."""
     if os.path.exists(salida):
         os.remove(salida)
-
     argumentos = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                   "-File", os.path.join(util.PS_DIR, "actualizar.ps1"), "-Salida", salida]
-    if solo_drivers:
-        argumentos.append("-SoloDrivers")
-
+    argumentos.extend(argumentos_extra)
     proceso = subprocess.Popen(argumentos, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               creationflags=util.CREATE_NO_WINDOW)
     t0 = time.time()
@@ -114,20 +104,53 @@ def actualizar_windows(solo_drivers=False, aviso=None, maximo_s=7200):
         if time.time() - t0 > maximo_s:
             proceso.kill()
             return {"completo": False, "error": "tiempo máximo alcanzado (%d s)" % maximo_s}
-        estado = _leer(salida)
-        if estado:
-            fase = estado.get("fase")
-            if fase and fase != ultima_fase:
-                ultima_fase = fase
-                hechas = len(estado.get("hechas") or [])
-                fallidas = len(estado.get("fallidas") or [])
-                aviso("%s  [%d hechas, %d fallidas]" % (fase, hechas, fallidas))
+        if seguir_fase and aviso:
+            estado = _leer(salida)
+            if estado:
+                fase = estado.get("fase")
+                if fase and fase != ultima_fase:
+                    ultima_fase = fase
+                    hechas = len(estado.get("hechas") or [])
+                    fallidas = len(estado.get("fallidas") or [])
+                    aviso("%s  [%d hechas, %d fallidas]" % (fase, hechas, fallidas))
         time.sleep(2)
-
     estado = _leer(salida) or {}
     estado["_segundos"] = round(time.time() - t0, 1)
     estado["_rc"] = proceso.returncode
     return estado
+
+
+def buscar_actualizaciones(maximo_s=900):
+    """Busca lo que hay pendiente SIN instalar y lo clasifica (no necesita admin)."""
+    salida = os.path.join(util.ruta("logs", "tmp"), "buscar_actualizaciones.json")
+    os.makedirs(os.path.dirname(salida), exist_ok=True)
+    return _ejecutar_ps(salida, ["-SoloBuscar"], None, maximo_s, seguir_fase=False)
+
+
+def actualizar_windows(solo_drivers=False, aviso=None, maximo_s=7200,
+                       solo_actualizaciones=False, excluir_firmware=False,
+                       solo_descargar=False):
+    """Instala con actualizar.ps1, mostrando progreso.
+
+    Los grupos (actualizaciones / controladores / firmware) se pueden filtrar: la
+    interfaz pregunta por separado porque el firmware es el que puede dejar el
+    equipo sin arrancar si se corta la corriente.
+    """
+    aviso = aviso or (lambda *_: None)
+    carpeta = util.ruta("logs", "tmp")
+    os.makedirs(carpeta, exist_ok=True)
+    salida = os.path.join(carpeta, "actualizar.json")
+
+    extra = []
+    if solo_drivers:
+        extra.append("-SoloDrivers")
+    if solo_actualizaciones:
+        extra.append("-SoloActualizaciones")
+    if excluir_firmware:
+        extra.append("-ExcluirFirmware")
+    if solo_descargar:
+        extra.append("-SoloDescargar")
+    return _ejecutar_ps(salida, extra, aviso, maximo_s)
 
 
 def _leer(ruta):

@@ -1,9 +1,21 @@
-# Instala actualizaciones de Windows (o solo controladores) una a una, guardando
-# el progreso en JSON tras cada una. Es largo (puede tardar horas): el proceso se
-# lanza aparte y se vigila leyendo el fichero.
+# Actualizaciones y controladores de Windows, uno a uno, con el progreso en JSON.
+#
+# Modos:
+#   -SoloBuscar            busca y guarda la lista SIN instalar (no hace falta admin)
+#   -SoloDrivers           solo lo que Windows clasifica como controlador
+#   -SoloActualizaciones   solo actualizaciones (sin controladores)
+#   -ExcluirFirmware       descarta BIOS/UEFI/firmware del fabricante (lo delicado)
+#   -SoloDescargar         descarga sin instalar
+#
+# Cada elemento se clasifica en tres grupos: actualizacion, controlador y firmware.
+# El firmware (BIOS/UEFI) es lo único que puede dejar el equipo sin arrancar si se
+# corta la corriente a mitad de la instalación: va aparte para pedir confirmación.
 param(
     [string]$Salida = "actualizar.json",
+    [switch]$SoloBuscar,
     [switch]$SoloDrivers,
+    [switch]$SoloActualizaciones,
+    [switch]$ExcluirFirmware,
     [switch]$SoloDescargar
 )
 
@@ -29,6 +41,20 @@ function Codigo($c) {
         default { return "codigo $c" }
     }
 }
+# Firmware = lo que puede dejar el equipo sin arrancar si se corta la corriente.
+function Clasificar($u) {
+    $titulo = [string]$u.Title
+    if ($titulo -match '(?i)(bios|uefi|system firmware|firmware)') { return 'firmware' }
+    if ($u.Type -eq 2) { return 'controlador' }
+    return 'actualizacion'
+}
+function Nombre-Grupo($tipo) {
+    switch ($tipo) {
+        'firmware'    { return 'firmware' }
+        'controlador' { return 'controladores' }
+        default       { return 'actualizaciones' }
+    }
+}
 
 $admin = $false
 try {
@@ -39,10 +65,13 @@ try {
 $r = [ordered]@{
     completo    = $false
     inicio      = (Get-Date).ToString('s')
-    modo        = if ($SoloDrivers) { 'controladores' } else { 'todo' }
+    modo        = if ($SoloBuscar) { 'solo busqueda' } elseif ($SoloDrivers) { 'controladores' } elseif ($SoloActualizaciones) { 'solo actualizaciones' } else { 'todo' }
+    excluir_firmware = [bool]$ExcluirFirmware
     solo_descarga = [bool]$SoloDescargar
     admin       = $admin
     total       = 0
+    grupos      = [ordered]@{ actualizaciones = 0; controladores = 0; firmware = 0 }
+    mb          = [ordered]@{ actualizaciones = 0; controladores = 0; firmware = 0 }
     hechas      = @()
     fallidas    = @()
     pendientes  = @()
@@ -50,14 +79,6 @@ $r = [ordered]@{
     fase        = 'iniciando'
 }
 Guardar-Json $r $Salida | Out-Null
-
-if (-not $admin) {
-    $r.completo = $true
-    $r.error = 'Se necesitan privilegios de administrador para instalar actualizaciones.'
-    Guardar-Json $r $Salida | Out-Null
-    Write-Output 'ERROR: sin administrador'
-    exit 1
-}
 
 # ---------------------------------------------------------------- busqueda
 $r.fase = 'buscando actualizaciones'
@@ -71,14 +92,21 @@ try {
     $resultado = $buscador.Search($criterio)
 
     $updates = @()
+    $tipos   = @()
     foreach ($u in $resultado.Updates) {
+        $tipo = Clasificar $u
+        $mb   = [math]::Round($u.MaxDownloadSize / 1MB, 1)
         $updates += $u
+        $tipos   += $tipo
         $r.pendientes += [ordered]@{
             titulo = Recorta $u.Title 120
             kb     = ($u.KBArticleIDs -join ',')
-            mb     = [math]::Round($u.MaxDownloadSize / 1MB, 1)
-            tipo   = if ($u.Type -eq 2) { 'controlador' } else { 'actualizacion' }
+            mb     = $mb
+            tipo   = $tipo
         }
+        $grupo = Nombre-Grupo $tipo
+        $r.grupos[$grupo] = [int]$r.grupos[$grupo] + 1
+        $r.mb[$grupo]     = [math]::Round([double]$r.mb[$grupo] + $mb, 1)
     }
     $r.total = $updates.Count
 } catch {
@@ -89,17 +117,46 @@ try {
     exit 1
 }
 
+# La búsqueda no necesita administrador: se puede consultar sin tocar el equipo.
+if ($SoloBuscar) {
+    $r.completo = $true
+    $r.fase = 'solo busqueda'
+    $r.fin = (Get-Date).ToString('s')
+    Guardar-Json $r $Salida | Out-Null
+    Write-Output ("OK busqueda: total=" + $r.total + " actualizaciones=" + $r.grupos.actualizaciones + " controladores=" + $r.grupos.controladores + " firmware=" + $r.grupos.firmware)
+    exit 0
+}
+
+if (-not $admin) {
+    $r.completo = $true
+    $r.error = 'Se necesitan privilegios de administrador para instalar actualizaciones.'
+    Guardar-Json $r $Salida | Out-Null
+    Write-Output 'ERROR: sin administrador'
+    exit 1
+}
+
+# ---------------------------------------------------------------- seleccion
+$elegidas = @()
+for ($i = 0; $i -lt $updates.Count; $i++) {
+    $tipo = $tipos[$i]
+    if ($SoloActualizaciones -and $tipo -ne 'actualizacion') { continue }
+    if ($SoloDrivers -and $tipo -eq 'actualizacion') { continue }
+    if ($ExcluirFirmware -and $tipo -eq 'firmware') { continue }
+    $elegidas += $updates[$i]
+}
+$r.total = $elegidas.Count
+
 if ($r.total -eq 0) {
     $r.completo = $true
-    $r.fase = 'nada que instalar'
+    $r.fase = 'nada que instalar con estos filtros'
     Guardar-Json $r $Salida | Out-Null
-    Write-Output 'OK: no hay actualizaciones pendientes'
+    Write-Output 'OK: no hay nada que instalar con los filtros aplicados'
     exit 0
 }
 
 # ---------------------------------------------------------------- descarga e instalacion
 $indice = 0
-foreach ($u in $updates) {
+foreach ($u in $elegidas) {
     $indice++
     $titulo = Recorta $u.Title 120
     $r.fase = "($indice/$($r.total)) $titulo"

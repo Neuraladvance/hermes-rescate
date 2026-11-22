@@ -64,8 +64,11 @@ QUÉ HACE
 
 3. Conectar al WiFi del técnico → hotspot del móvil, sin escribir nada.
 
-4. Instalar actualizaciones de Windows → todas las pendientes, una a una,
-   con progreso y reinicio al final. Puede tardar horas: es lo normal.
+4. Instalar actualizaciones de Windows → primero CONSULTA qué hay pendiente (sin
+   instalar) y lo enseña en tres grupos: actualizaciones, controladores y
+   firmware/BIOS. Pregunta grupo a grupo; el firmware viene desactivado porque
+   si se corta la corriente a mitad el portátil puede quedar sin arrancar.
+   Instala uno a uno, con progreso, y al final pide reiniciar. Puede tardar horas.
 
 5. Instalar programas → catálogo de habituales (Chrome, 7-Zip, VLC, Adobe
    Reader, LibreOffice, Zoom, AnyDesk, CPU-Z, CrystalDiskInfo…) o búsqueda
@@ -89,8 +92,10 @@ USO SIN MENÚ (para lotes o scripts)
   Rescate.bat --reparar sfc_scan     una acción concreta (o varias con coma)
   Rescate.bat --listar               catálogo completo con ids
   Rescate.bat --wifi                 conectar al hotspot
-  Rescate.bat --actualizar           instalar actualizaciones
+  Rescate.bat --buscar-actualizaciones  consultar qué hay pendiente (no instala)
+  Rescate.bat --actualizar           instalar actualizaciones y controladores
   Rescate.bat --drivers              solo controladores
+  Rescate.bat --drivers --con-firmware   incluir BIOS/UEFI (enchufado y con batería)
   Rescate.bat --instalar 7zip.7zip   instalar un programa de winget
   Rescate.bat --estado               comprobación rápida del entorno
   Añade --sin-lento para saltarse Defender/BitLocker/actualizaciones.
