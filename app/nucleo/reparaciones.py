@@ -21,8 +21,14 @@ def _reg(rid, nombre, nivel, que, cuando, accion, admin=False, red=False,
     CATALOGO[rid] = {
         "id": rid, "nombre": nombre, "nivel": nivel, "que": que, "cuando": cuando,
         "accion": accion, "admin": admin, "red": red, "categoria": categoria,
-        "verifica": verifica, "lento": lento,
+        "verifica": verifica, "lento": lento, "parametro": False,
     }
+
+
+def _parametro_valido(nombre):
+    """Solo letras, números, punto, guion y guion bajo: nada de rutas ni comodines."""
+    import re
+    return bool(re.match(r"^[A-Za-z0-9._-]{1,60}$", (nombre or "").strip()))
 
 
 def _ps(script, timeout=900):
@@ -748,6 +754,84 @@ def _r():
          "Cuenta local bloqueada con autorización del cliente.",
          _manual(INSTRUCCIONES_PASSWORD), categoria="Manual")
 
+    # --- acciones con nombre (las usa el chat cuando localiza un programa colgado)
+    _reg("reiniciar_proceso", "Reiniciar un programa colgado", 2,
+         "Cierra el programa y lo vuelve a abrir desde su ruta, sin tocar nada más.",
+         "Un programa no responde (ventana en blanco o «No responde» en el Administrador "
+         "de tareas). Hay que indicar el nombre: Dropbox, chrome, explorer…",
+         _reiniciar_proceso, categoria="Programas")
+    CATALOGO["reiniciar_proceso"]["parametro"] = True
+    _reg("reiniciar_servicio", "Reiniciar un servicio de Windows", 2,
+         "Para y vuelve a arrancar un servicio concreto.",
+         "Un servicio necesario está «Detenido» o atascado. Hay que indicar el nombre "
+         "corto del servicio: Spooler, wuauserv, Dnscache…",
+         _reiniciar_servicio, admin=True, categoria="Sistema")
+    CATALOGO["reiniciar_servicio"]["parametro"] = True
+
+# ====================================================================== acciones con nombre
+def _reiniciar_proceso(aviso, nombre):
+    """Cierra y relanza un programa concreto, recordando su ruta antes."""
+    aviso("Reiniciando «%s»..." % nombre)
+    script = r"""
+$ErrorActionPreference = 'SilentlyContinue'
+$n = "%s"
+$p = Get-Process -Name $n
+if (-not $p) { "no_corre"; exit }
+$ruta = ""
+try { $ruta = $p[0].Path } catch { }
+$pid0 = $p[0].Id
+$p | Stop-Process -Force
+Start-Sleep -Milliseconds 900
+$queda = Get-Process -Name $n
+if ($queda) { "sigue_abierto" } else { "cerrado" }
+if ($ruta -and (Test-Path $ruta)) {
+    try { Start-Process -FilePath $ruta; Start-Sleep -Milliseconds 700
+          if (Get-Process -Name $n) { "relanzado" } else { "no_relanzo" } } catch { "error_relanzar" }
+} else { "sin_ruta" }
+""" % nombre
+    rc, out, err = _ps(script, timeout=120)
+    lineas = (out or "").split()
+    if "no_corre" in lineas:
+        return False, "«%s» no estaba abierto." % nombre, (out + " " + err).strip()
+    partes = []
+    cerrado = "cerrado" in lineas
+    relanzado = "relanzado" in lineas
+    if not cerrado:
+        return False, "No se pudo cerrar «%s» (¿necesita administrador?)." % nombre, out
+    if relanzado:
+        return True, "«%s» cerrado y vuelto a abrir." % nombre, (out + " " + err).strip()
+    if "sin_ruta" in lineas or "error_relanzar" in lineas:
+        return True, ("«%s» cerrado, pero no he podido volver a abrirlo: ábrelo a mano."
+                      % nombre), (out + " " + err).strip()
+    return True, "«%s» cerrado." % nombre, (out + " " + err).strip()
+
+
+def _reiniciar_servicio(aviso, nombre):
+    """Para y arranca un servicio concreto."""
+    aviso("Reiniciando el servicio «%s»..." % nombre)
+    script = r"""
+$ErrorActionPreference = 'SilentlyContinue'
+$n = "%s"
+$s = Get-Service -Name $n
+if (-not $s) { "no_existe"; exit }
+$antes = $s.Status
+Restart-Service -Name $n -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+$d = Get-Service -Name $n
+"antes=$antes ahora=$($d.Status)"
+""" % nombre
+    rc, out, err = _ps(script, timeout=120)
+    if "no_existe" in (out or ""):
+        return False, "No existe el servicio «%s»." % nombre, (out + " " + err).strip()
+    ahora = ""
+    for trozo in (out or "").split():
+        if trozo.startswith("ahora="):
+            ahora = trozo.split("=", 1)[1]
+    if ahora.lower() == "running":
+        return True, "Servicio «%s» reiniciado y en marcha." % nombre, out.strip()
+    return False, ("No he podido reiniciar «%s» (estado: %s). "
+                   "Suele necesitar administrador." % (nombre, ahora or "?")), (out + " " + err).strip()
+
 
 _r()
 
@@ -765,12 +849,21 @@ def por_categoria():
     return grupos
 
 
-def ejecutar(rid, aviso=None):
-    """Ejecuta una reparacion y devuelve el registro de lo ocurrido."""
+def ejecutar(rid, aviso=None, parametro=None):
+    """Ejecuta una reparacion y devuelve el registro de lo ocurrido.
+
+    parametro: nombre de proceso o servicio, para las acciones que lo necesitan.
+    """
     aviso = aviso or (lambda *_: None)
     r = CATALOGO.get(rid)
     if not r:
         return {"id": rid, "ok": False, "mensaje": "Reparación desconocida: %s" % rid, "detalle": ""}
+    if r.get("parametro") and not (parametro or "").strip():
+        return {"id": rid, "ok": False, "detalle": "",
+                "mensaje": "Falta el nombre: ACCION: %s <nombre>" % rid}
+    if parametro and not _parametro_valido(parametro):
+        return {"id": rid, "ok": False, "detalle": "",
+                "mensaje": "Nombre no válido: %s" % parametro}
     if r["nivel"] == 3:
         return {"id": rid, "ok": False, "mensaje": r["que"], "detalle": "", "manual": True}
     if r["admin"] and not util.es_admin():
@@ -779,7 +872,8 @@ def ejecutar(rid, aviso=None):
     util.log("REPARACION inicio: %s" % rid)
     t0 = time.time()
     try:
-        ok, mensaje, detalle = r["accion"](aviso)
+        ok, mensaje, detalle = (r["accion"](aviso, parametro.strip())
+                                 if r.get("parametro") else r["accion"](aviso))
     except Exception as exc:  # una reparacion no debe tumbar el programa
         ok, mensaje, detalle = False, "Error al ejecutar: %s" % exc, ""
     segundos = round(time.time() - t0, 1)

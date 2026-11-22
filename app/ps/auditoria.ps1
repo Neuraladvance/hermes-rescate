@@ -266,6 +266,39 @@ try {
 } catch { $d.errores += "servicios: $_" }
 Marca 'estabilidad'
 
+# ---------------------------------------------------------------- procesos
+# Para poder responder «¿está corriendo X?» y detectar programas colgados.
+try {
+    $todos = @(Get-Process | Where-Object { $_.Id -gt 4 })
+    $d.procesos_total = $todos.Count
+    $ahora = Get-Date
+    $fila = {
+        param($p)
+        $mb = 0
+        try { $mb = [math]::Round($p.WorkingSet64 / 1MB, 1) } catch { }
+        $cpu = 0
+        try { $cpu = [math]::Round($p.TotalProcessorTime.TotalSeconds, 1) } catch { }
+        $resp = $true
+        try { $resp = [bool]$p.Responding } catch { }
+        $min = $null
+        try { if ($p.StartTime) { $min = [int]($ahora - $p.StartTime).TotalMinutes } } catch { }
+        [ordered]@{
+            nombre = "$($p.ProcessName)"; pid = $p.Id; mb = $mb; cpu_s = $cpu
+            respondiendo = $resp; minutos = $min
+        }
+    }
+    # Todos los que NO responden (posibles colgados) + los 20 que más memoria usan.
+    $colgados = @($todos | Where-Object { try { -not $_.Responding } catch { $false } } | ForEach-Object { & $fila $_ })
+    $gordos = @($todos | Sort-Object -Property WorkingSet64 -Descending |
+                Select-Object -First 20 | ForEach-Object { & $fila $_ })
+    $d.procesos_colgados = $colgados
+    $d.procesos_gordos = $gordos
+    # Nombres de todas las aplicaciones visibles (sin ventana principal no son apps de usuario)
+    $d.procesos_apps = @($todos | Where-Object { try { $_.MainWindowTitle } catch { $false } } |
+                          ForEach-Object { "$($_.ProcessName)" } | Sort-Object -Unique)
+} catch { $d.errores += "procesos: $_" }
+Marca 'procesos'
+
 # ---------------------------------------------------------------- arranque / software
 try {
     $d.arranque = @(Get-CimInstance Win32_StartupCommand | ForEach-Object {

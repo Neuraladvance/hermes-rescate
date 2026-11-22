@@ -1,13 +1,13 @@
 {
   "ia": {
     "endpoint": "https://openrouter.ai/api/v1",
-    "modelo": "baidu/ernie-5.5-flash-preview:free",
-    "clave": "tu-clave",
+    "modelo": "openrouter/free",
+    "clave": "",
     "temperatura": 0.2,
     "max_tokens": 1200,
     "aviso_privacidad": true,
     "alternativas": [
-      "openrouter/free",
+      "baidu/ernie-5.5-flash-preview:free",
       "google/gemma-4-31b-it:free"
     ],
     "max_modelos": 3

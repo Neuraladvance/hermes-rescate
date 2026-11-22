@@ -99,12 +99,26 @@ Tienes delante los datos reales de UN equipo (auditoría adjunta).
 Reglas:
 - Responde corto (máximo 12 líneas) salvo que pidan detalle.
 - Distingue lo que es un problema real de lo que es información normal. No alarmes.
-- Solo puedes ejecutar acciones del CATÁLOGO. No inventes comandos ni rutas.
-- Cuando quieras ejecutar una acción, escribe en una línea aparte exactamente:
+- NUNCA digas «no puedo comprobarlo» si existe una consulta de lectura que lo responde:
+  PÍDELA (ver abajo). Es mejor comprobar que suponer.
+- CONSULTA de solo lectura: para mirar algo que no está en la auditoría, escribe en una
+  línea aparte exactamente:
+  CONSULTA: <comando de PowerShell que solo lea>
+  Permitido: Get-*, Test-*, ipconfig, ping, netstat, tracert, nslookup, tasklist, whoami,
+  systeminfo, sc query, reg query, schtasks /query, winget list, dir, type, powercfg /query
+  y tuberías con Select-Object, Where-Object, Sort-Object, Format-Table, Measure-Object.
+  Prohibido cualquier verbo que cambie algo (Set-, New-, Remove-, Start-, Stop-, Restart-,
+  Disable-, del, format, taskkill…): esas no se ejecutan. El técnico confirma la consulta y
+  te devuelvo la salida tal cual para que la interpretes.
+- ACCIONES: solo las del CATÁLOGO. No inventes ids. Para ejecutar una, escribe en una línea
+  aparte exactamente:
   ACCION: id_de_la_accion
-  (una por línea, solo si de verdad hace falta). El programa pedirá confirmación al técnico.
-- Si falta un dato para decidir, dilo en vez de suponer.
-- Nada de consejos genéricos de manual: usa los datos del equipo.
+  Si la acción necesita un nombre, añádelo detrás:
+  ACCION: reiniciar_proceso Dropbox
+  ACCION: reiniciar_servicio Spooler
+  El programa pide confirmación al técnico y te devuelve el resultado.
+- Flujo natural: consulta para leer → interpreta → si hay un fallo que se puede arreglar,
+  propón la ACCION concreta. Nada de consejos genéricos de manual: usa los datos del equipo.
 """
 
 
@@ -197,6 +211,13 @@ class Seudonimo:
 
 
 # ------------------------------------------------------------------ contexto
+def _ejemplos_consulta():
+    """Ejemplos concretos para el contexto (no importa consulta: evita ciclos)."""
+    return ("Get-Process Dropbox; Get-Service Spooler; tasklist | Select-Object -First 30; "
+            "sc query wuauserv; netstat -ano | Select-String LISTEN; Get-NetTCPConnection; "
+            "Get-EventLog -LogName Application -Newest 15")
+
+
 def contexto(datos, hallazgos, resumen):
     """Resumen compacto y legible del equipo para el modelo (seudonimizado despues)."""
     so = datos.get("so") or {}
@@ -248,6 +269,26 @@ def contexto(datos, hallazgos, resumen):
     if programas:
         lineas.append("PROGRAMAS QUE MAS OCUPAN: %s" % ", ".join(
             "%s (%.0f MB)" % (p.get("nombre"), float(p.get("mb") or 0)) for p in programas[:8]))
+    # --- procesos en ejecución: permite responder «¿corre X?» sin consultar
+    if datos.get("procesos_total"):
+        apps = datos.get("procesos_apps") or []
+        lineas.append("PROCESOS: %s en total. Con ventana abierta: %s"
+                      % (datos.get("procesos_total"),
+                         ", ".join(apps[:25]) if apps else "ninguno"))
+        colgados = datos.get("procesos_colgados") or []
+        if colgados:
+            lineas.append("PROCESOS QUE NO RESPONDEN (posible cuelgue): %s" % ", ".join(
+                "%s (pid %s, %s MB, %s min)" % (p.get("nombre"), p.get("pid"), p.get("mb"),
+                                                p.get("minutos")) for p in colgados[:8]))
+        else:
+            lineas.append("PROCESOS QUE NO RESPONDEN: ninguno")
+        gordos = datos.get("procesos_gordos") or []
+        if gordos:
+            lineas.append("PROCESOS QUE MAS MEMORIA USAN: %s" % ", ".join(
+                "%s (%s MB)" % (p.get("nombre"), p.get("mb")) for p in gordos[:10]))
+    lineas.append("CONSULTAS: puedes pedir CONSULTA: <comando de solo lectura> para mirar "
+                  "algo que no esté aquí (procesos concretos, servicios, red, eventos). "
+                  "Ejemplos: %s" % _ejemplos_consulta())
     basura = datos.get("basura") or []
     if basura:
         lineas.append("ESPACIO RECUPERABLE: %s" % ", ".join(
@@ -349,11 +390,29 @@ def _peticion(cfg, mensajes, timeout=75):
         "en config/config.json:\n%s" % (len(errores), detalle))
 
 
-ACCION_RE = re.compile(r"^\s*ACCI[ÓO]N\s*:\s*([a-z0-9_]+)\s*$", re.IGNORECASE | re.MULTILINE)
+ACCION_RE = re.compile(r"^\s*ACCI[ÓO]N\s*:\s*([a-z0-9_]+)(?:\s+(.+?))?\s*$",
+                        re.IGNORECASE | re.MULTILINE)
+CONSULTA_RE = re.compile(r"^\s*CONSULTA\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 
 
 def acciones_de(texto):
-    return [m.group(1) for m in ACCION_RE.finditer(texto or "")]
+    """Lista de dicts: {id, parametro}. Acepta «ACCION: id» y «ACCION: id nombre»."""
+    salida = []
+    for m in ACCION_RE.finditer(texto or ""):
+        piezas = {"id": m.group(1).lower(), "parametro": (m.group(2) or "").strip()}
+        if piezas not in salida:
+            salida.append(piezas)
+    return salida
+
+
+def consultas_de(texto):
+    """Comandos de solo lectura que pide el modelo (una por línea)."""
+    salida = []
+    for m in CONSULTA_RE.finditer(texto or ""):
+        comando = m.group(1).strip().strip("`")
+        if comando and comando not in salida:
+            salida.append(comando)
+    return salida
 
 
 class Agente:
@@ -371,15 +430,17 @@ class Agente:
         ]
 
     def preguntar(self, texto):
-        """Devuelve (respuesta, acciones_sugeridas). Salta de modelo si uno falla."""
+        """Devuelve (respuesta, acciones). Las consultas quedan en .ultimas_consultas."""
         self.mensajes.append({"role": "user", "content": self.seudonimo.aplicar(texto)})
         if len(self.mensajes) > 24:
             self.mensajes = self.mensajes[:2] + self.mensajes[-20:]
         bruto, modelo, errores = _peticion(self.cfg, self.mensajes)
         self.ultimo_modelo = modelo
         self.ultimos_errores = errores
+        self.ultimas_consultas = []
         self.mensajes.append({"role": "assistant", "content": bruto})
-        acciones = [a for a in acciones_de(bruto) if reparaciones.obtener(a)]
+        acciones = [a for a in acciones_de(bruto) if reparaciones.obtener(a["id"])]
+        self.ultimas_consultas = consultas_de(bruto)
         return self.seudonimo.restaurar(bruto), acciones
 
     def aviso_privacidad(self):

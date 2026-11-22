@@ -107,6 +107,13 @@ QUÉ HACE
 
 7. Hablar con la IA → opcional. Explica los hallazgos y propone acciones,
    pero SOLO puede ejecutar las del catálogo, y siempre con tu confirmación.
+   Si le falta un dato, PIDE UNA CONSULTA de solo lectura (CONSULTA: ...): el
+   programa te enseña el comando, tú lo apruebas, lo ejecuta y le devuelve la
+   salida. Solo se permiten lecturas (Get-*, ipconfig, netstat, tasklist, sc query,
+   reg query, dir…); cualquier cosa que modifique se rechaza.
+   Y luego arregla: con el catálogo (43 acciones), incluidas «reiniciar_proceso
+   Dropbox» y «reiniciar_servicio Spooler» cuando el fallo es un programa colgado
+   o un servicio detenido. Nada se ejecuta sin que confirmes.
    Antes de enviar nada te dice qué datos salen y seudonimiza el equipo
    (nombre, usuario, serie, MAC, IP). Si ya has auditado hace menos de 2 horas
    reutiliza ese análisis (te pregunta) en vez de volver a leer el equipo, y

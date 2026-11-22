@@ -171,6 +171,55 @@ def recomendadas_solo_validas():
     return "%d recomendadas, todas del catálogo" % len(ids)
 
 
+def consultas_lista_blanca():
+    """El canal de consultas no debe permitir nada que modifique el equipo."""
+    from nucleo import consulta
+    permitidas = ["Get-Process Dropbox", "Get-Process Dropbox | Select-Object Name,Responding",
+                  "sc query Spooler", "ipconfig /all", "tasklist", "netstat -ano",
+                  "Get-CimInstance Win32_DiskDrive | Format-Table -AutoSize", "winget list",
+                  "Get-EventLog -LogName System -Newest 10", r"dir C:\Windows"]
+    bloqueadas = [r"Remove-Item C:\Windows -Recurse", "Set-Service Spooler -Status Stopped",
+                  "taskkill /F /IM chrome.exe", "format C:", "shutdown /r",
+                  "Stop-Process -Name explorer", "Get-Process x | Remove-Item",
+                  r"reg add HKLM\x /v y /d z", r"dir C:\ ; del C:\x",
+                  r"Get-ChildItem | Out-File C:\x.txt", "powershell -Command Get-Process"]
+    fallos = []
+    for cmd in permitidas:
+        ok, motivo = consulta.permitida(cmd)
+        if not ok:
+            fallos.append("bloquea de más: %s (%s)" % (cmd, motivo))
+    for cmd in bloqueadas:
+        ok, motivo = consulta.permitida(cmd)
+        if ok:
+            fallos.append("PERMITE: %s" % cmd)
+    if fallos:
+        raise AssertionError(" | ".join(fallos))
+    return "%d de lectura + %d bloqueadas" % (len(permitidas), len(bloqueadas))
+
+
+def acciones_con_nombre():
+    """Las acciones que necesitan nombre lo validan y lo exigen."""
+    from nucleo import reparaciones
+    r = reparaciones.obtener("reiniciar_proceso")
+    assert r and r.get("parametro"), "reiniciar_proceso debe pedir nombre"
+    assert reparaciones.obtener("reiniciar_servicio").get("parametro")
+    sin = reparaciones.ejecutar("reiniciar_proceso")
+    malo = reparaciones.ejecutar("reiniciar_proceso", parametro="a;b|c")
+    assert not sin["ok"] and not malo["ok"], "acepta nombre vacío o con caracteres raros"
+    return "2 acciones con nombre · validación de nombre"
+
+
+def procesos_en_la_auditoria():
+    """La auditoría debe traer procesos (para responder «¿corre X?»)."""
+    total = DATOS.get("procesos_total")
+    if not total:
+        raise AssertionError("la auditoría no trae procesos_total")
+    apps = DATOS.get("procesos_apps") or []
+    gordos = DATOS.get("procesos_gordos") or []
+    return "%d procesos · %d con ventana · %d grandes · %d colgados" % (
+        total, len(apps), len(gordos), len(DATOS.get("procesos_colgados") or []))
+
+
 # ====================================================================== D. informe
 def informe_se_genera():
     import rescate
@@ -238,6 +287,7 @@ def menu_completo():
     class AgenteFalso:
         ultimos_errores = []
         ultimo_modelo = "modelo-1"
+        ultimas_consultas = []
 
         def __init__(self, *a, **k):
             pass
@@ -405,6 +455,11 @@ if __name__ == "__main__":
           % (len(DATOS), len(HALLAZGOS), RESUMEN.get("veredicto")))
     check("Reglas robustas ante datos raros o ausentes", diagnostico_fuzz)
     check("Las recomendaciones existen en el catálogo", recomendadas_solo_validas)
+
+    seccion("C2. Consultas de solo lectura y acciones con nombre")
+    check("Lista blanca de consultas", consultas_lista_blanca)
+    check("Acciones que piden nombre", acciones_con_nombre)
+    check("Procesos en la auditoría", procesos_en_la_auditoria)
 
     seccion("B. Catálogo de reparaciones")
     check("Catálogo íntegro", catalogo_completo)

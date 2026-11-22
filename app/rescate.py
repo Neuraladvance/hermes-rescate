@@ -158,7 +158,13 @@ def aplicar_recomendadas(datos, hallazgos, resumen, auto=False):
                                       if extra else ""))
 
     ejecuciones = []
-    seleccion = list(seguras)
+    seleccion = []
+    if seguras:
+        # Aunque sean «seguras», no se toca nada sin permiso: una sola pregunta para el bloque.
+        nombres = ", ".join(reparaciones.obtener(i)["nombre"] for i in seguras)
+        print()
+        if auto or preguntar("¿Aplicar las seguras? (%s)" % nombres[:110], "s"):
+            seleccion.extend(seguras)
     if cambio:
         print()
         for rid in cambio:
@@ -581,9 +587,10 @@ def menu_chat(datos, hallazgos, resumen):
             return
         if not texto or texto.lower() in ("salir", "exit", "quit"):
             return
-        if texto.lower().startswith("accion "):
-            rid = texto.split(None, 1)[1].strip()
-            _ejecutar_con_confirmacion(rid)
+        if texto.lower().startswith("accion ") or texto.lower().startswith("acción "):
+            resto = texto.split(None, 1)[1].strip()
+            piezas = resto.split(None, 1)
+            _ejecutar_con_confirmacion(piezas[0], piezas[1] if len(piezas) > 1 else None)
             continue
         try:
             respuesta, acciones = agente.preguntar(texto)
@@ -591,17 +598,62 @@ def menu_chat(datos, hallazgos, resumen):
             mal(str(exc))
             continue
         if agente.ultimos_errores:
-            ojo("Respondió %s (fallaron: %s)"
-                % (agente.ultimo_modelo,
-                   ", ".join(m for m, _ in agente.ultimos_errores)))
+            print(C.color("  · Responde %s (los demás no estaban disponibles)"
+                          % agente.ultimo_modelo, C.GRIS))
         print("\n" + "\n".join("  " + linea for linea in respuesta.splitlines()) + "\n")
-        for rid in acciones:
-            r = reparaciones.obtener(rid)
-            if r and preguntar("La IA propone «%s». ¿Ejecutarla?" % r["nombre"], "n"):
-                _ejecutar_con_confirmacion(rid)
+        consultas = list(getattr(agente, "ultimas_consultas", []) or [])
+        vueltas = 0
+        while consultas and vueltas < 3:
+            salidas = _ejecutar_consultas(consultas)
+            if not salidas:
+                break
+            try:
+                respuesta, acciones = agente.preguntar(
+                    "Resultado de las consultas pedidas. Interpreta y contesta al técnico:"
+                    "\n\n" + "\n\n".join(salidas))
+            except RuntimeError as exc:
+                mal(str(exc))
+                break
+            print("\n" + "\n".join("  " + linea for linea in respuesta.splitlines()) + "\n")
+            consultas = list(getattr(agente, "ultimas_consultas", []) or [])
+            vueltas += 1
+        for accion in acciones:
+            r = reparaciones.obtener(accion["id"])
+            if not r:
+                continue
+            nombre = r["nombre"]
+            if accion.get("parametro"):
+                nombre += " (%s)" % accion["parametro"]
+            if preguntar("La IA propone «%s». ¿Ejecutarla?" % nombre, "n"):
+                _ejecutar_con_confirmacion(accion["id"], accion.get("parametro"),
+                                           confirmado=True)
 
 
-def _ejecutar_con_confirmacion(rid):
+def _ejecutar_consultas(comandos):
+    """Ejecuta (con permiso) las consultas de solo lectura y devuelve las salidas."""
+    from nucleo import consulta
+    salidas = []
+    for comando in comandos[:3]:
+        print()
+        paso("Consulta: %s" % comando)
+        valido, motivo = consulta.permitida(comando)
+        if not valido:
+            mal("No se ejecuta: %s." % motivo)
+            salidas.append("CONSULTA RECHAZADA (%s): %s" % (motivo, comando))
+            continue
+        if not preguntar("¿Ejecutarla? (solo lectura, no cambia nada)", "s"):
+            salidas.append("El técnico no ha querido ejecutar: %s" % comando)
+            continue
+        ok, salida = consulta.ejecutar(comando)
+        for linea in salida.splitlines()[:25]:
+            print(C.color("    " + linea[:160], C.GRIS))
+        if len(salida.splitlines()) > 25:
+            print(C.color("    …", C.GRIS))
+        salidas.append("SALIDA de `%s`:\n%s" % (comando, salida))
+    return salidas
+
+
+def _ejecutar_con_confirmacion(rid, parametro=None, confirmado=False):
     r = reparaciones.obtener(rid)
     if not r:
         mal("Esa acción no existe en el catálogo: %s" % rid)
@@ -610,7 +662,20 @@ def _ejecutar_con_confirmacion(rid):
         print(r["que"])
         print(reparaciones.ejecutar(rid)["detalle"])
         return
-    registro = reparaciones.ejecutar(rid, aviso=lambda m: print("      " + C.color(m, C.GRIS)))
+    if r.get("parametro") and not (parametro or "").strip():
+        try:
+            parametro = input(C.color("  nombre (proceso o servicio): ", C.CIAN)).strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if not parametro:
+            ojo("Sin nombre no se puede hacer nada.")
+            return
+    if r["nivel"] == 2 and not confirmado:
+        if not preguntar("«%s» cambia configuración. ¿Continuar?" % r["nombre"], "n"):
+            return
+    registro = reparaciones.ejecutar(rid, aviso=lambda m: print("      " + C.color(m, C.GRIS)),
+                                     parametro=parametro)
     (bien if registro["ok"] else mal)("%s (%s)" % (registro["mensaje"], _dur(registro.get("segundos"))))
 
 
