@@ -618,7 +618,7 @@ def menu_chat(datos, hallazgos, resumen):
             consultas = list(getattr(agente, "ultimas_consultas", []) or [])
             vueltas += 1
         for orden, paquete in list(getattr(agente, "ultimas_instalaciones", []) or [])[:3]:
-            _ejecutar_instalacion(orden, paquete)
+            _ejecutar_instalacion(orden, paquete, pista=texto)
         for accion in acciones:
             r = reparaciones.obtener(accion["id"])
             if not r:
@@ -631,11 +631,116 @@ def menu_chat(datos, hallazgos, resumen):
                                            confirmado=True)
 
 
-def _ejecutar_instalacion(orden, paquete):
+def _resolver_paquete(objetivo):
+    """De un id o de un nombre («Foxit Reader») saca el id exacto de winget."""
+    from nucleo import instalador
+    objetivo = (objetivo or "").strip()
+    # Un id de winget lleva punto (Foxit.FoxitReader); «7zip» a secas es una búsqueda.
+    if "." in objetivo and instalador.id_valido(objetivo):
+        return objetivo
+    if not objetivo:
+        return None
+    paso("Buscando en winget: %s" % objetivo)
+    encontrados = instalador.buscar(objetivo) or []
+    if not encontrados:
+        # winget con dos palabras a veces no devuelve nada: buscar cada palabra y juntar.
+        vistos, juntos = set(), []
+        for palabra in [w for w in objetivo.split() if len(w) > 2][:3]:
+            paso("Buscando en winget: %s" % palabra)
+            for paquete in instalador.buscar(palabra) or []:
+                if paquete.get("id") and paquete["id"] not in vistos:
+                    vistos.add(paquete["id"])
+                    juntos.append(paquete)
+        encontrados = juntos
+    if not encontrados:
+        mal("winget no encuentra nada parecido a «%s»." % objetivo)
+        return None
+    # Puntuar: id/nombre exacto manda; si no, el que CONTENGA el término. Nada de
+    # coger el primero sin más (con «7zip» salía un programa de contraseñas).
+    buscado = objetivo.lower().replace(" ", "")
+    palabras = [p for p in objetivo.lower().split() if len(p) > 2]
+    puntuados = []
+    for paquete in encontrados:
+        ident = (paquete.get("id") or "").lower()
+        nombre = (paquete.get("nombre") or "").lower()
+        if not instalador.id_valido(paquete.get("id")):
+            continue
+        ident_plano, nombre_plano = ident.replace(".", ""), nombre.replace(" ", "")
+        if ident == buscado:
+            puntaje = 100
+        elif nombre == objetivo.lower():
+            puntaje = 95
+        elif all(p in ident_plano for p in palabras):
+            puntaje = 80            # el id contiene TODAS las palabras pedidas
+        elif all(p in nombre_plano for p in palabras):
+            puntaje = 70
+        elif buscado in ident_plano or buscado in nombre_plano:
+            puntaje = 65
+        else:
+            puntaje = 0             # una sola palabra suelta no basta
+        if puntaje:
+            puntuados.append((puntaje, paquete))
+    if not puntuados:
+        mal("Ninguno de los resultados parece «%s». Dime el id exacto (por ejemplo "
+            "Foxit.FoxitReader)." % objetivo)
+        for paquete in encontrados[:6]:
+            print(C.color("    %-34s %s" % (paquete.get("nombre", "")[:34], paquete.get("id", "")),
+                          C.GRIS))
+        return None
+    puntuados.sort(key=lambda x: -x[0])
+    # Si hay empate arriba, no se adivina: se pregunta cuál.
+    empatados = [paq for pun, paq in puntuados if pun == puntuados[0][0]]
+    if len(empatados) > 1:
+        print(C.color("  Hay varios parecidos. ¿Cuál?", C.GRIS))
+        for i, paquete in enumerate(empatados[:9], 1):
+            print(C.color("   %d) %-32s %s" % (i, paquete.get("nombre", "")[:32],
+                                              paquete.get("id", "")), C.GRIS))
+        try:
+            elegido = input(C.color("  número (Enter para cancelar): ", C.CIAN)).strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return None
+        if not elegido.isdigit() or not (1 <= int(elegido) <= len(empatados[:9])):
+            ojo("Sin elegir: no se instala nada.")
+            return None
+        mejor = empatados[int(elegido) - 1]
+    else:
+        mejor = puntuados[0][1]
+    if len(encontrados) > 1:
+        print(C.color("  Candidatos en winget:", C.GRIS))
+        for paquete in encontrados[:6]:
+            print(C.color("    %-34s %-32s %s" % (paquete.get("nombre", "")[:34],
+                                                 paquete.get("id", ""),
+                                                 paquete.get("version", "")), C.GRIS))
+    bien("Se usará «%s» (%s)" % (mejor.get("nombre"), mejor.get("id")))
+    return mejor.get("id")
+
+
+def _nombre_en_frase(frase):
+    """Saca el nombre probable del programa de «instala el programa Foxit, por favor»."""
+    sobras = {"instala", "instalar", "instalame", "instálame", "pon", "ponme", "añade",
+              "anade", "descarga", "el", "la", "los", "las", "un", "una", "programa",
+              "aplicacion", "aplicación", "app", "software", "de", "del", "por", "favor",
+              "please", "quiero", "necesito", "que", "me", "lo", "y", "para", "en", "este",
+              "pc", "equipo", "ordenador"}
+    palabras = [w.strip(",.¿?¡!()") for w in (frase or "").split()]
+    resto = [w for w in palabras if w and w.lower() not in sobras]
+    return " ".join(resto).strip()
+
+
+def _ejecutar_instalacion(orden, paquete, pista=None):
     """Instala o desinstala un programa con winget, con confirmación."""
     from nucleo import instalador
-    if not instalador.id_valido(paquete):
-        mal("Identificador de paquete no válido: %s" % paquete)
+    if not (paquete or "").strip():
+        # La IA escribió «INSTALAR:» a secas: se deduce de la frase del técnico.
+        paquete = _nombre_en_frase(pista)
+        if not paquete:
+            mal("La IA no ha dicho qué instalar (escribió «%s:» sin identificador)." % orden)
+            print("  Pídeselo otra vez con el nombre del programa, o usa: instalar <id de winget>")
+            return
+        ojo("La IA no indicó el programa; pruebo con lo que has pedido: «%s»." % paquete)
+    paquete = _resolver_paquete(paquete)
+    if not paquete:
         return
     if not instalador.winget_disponible():
         mal("winget no está disponible en este equipo (hace falta Windows 11 con App Installer).")

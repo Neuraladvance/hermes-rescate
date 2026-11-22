@@ -121,6 +121,8 @@ Reglas:
   la instalación de cualquier programa del catálogo de winget (y quitar uno instalado):
   INSTALAR: Foxit.FoxitReader
   DESINSTALAR: Foxit.FoxitReader
+  El identificador va en la MISMA línea, sin espacios (si no lo sabes, pide antes la
+  consulta «winget search»). Nunca escribas «INSTALAR:» a secas.
   Para acertar el identificador exacto, primero pide CONSULTA: winget search <nombre> o
   CONSULTA: winget show <id>. El programa enseña lo que vas a instalar, pide confirmación al
   técnico y te devuelve la salida de winget.
@@ -431,7 +433,7 @@ def _peticion(cfg, mensajes, timeout=75):
 ACCION_RE = re.compile(r"^\s*ACCI[ÓO]N\s*:\s*([a-z0-9_]+)(?:\s+(.+?))?\s*$",
                         re.IGNORECASE | re.MULTILINE)
 CONSULTA_RE = re.compile(r"^\s*CONSULTA\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
-INSTALAR_RE = re.compile(r"^\s*(INSTALAR|DESINSTALAR)\s*:\s*([A-Za-z0-9._+-]{2,120})\s*$",
+INSTALAR_RE = re.compile(r"^\s*(INSTALAR|DESINSTALAR)\s*:\s*(.*)$",
                          re.IGNORECASE | re.MULTILINE)
 
 
@@ -445,11 +447,21 @@ def acciones_de(texto):
     return salida
 
 
+def _limpiar_objetivo(texto):
+    """Quita comillas, acentos raros y sobras: «`Foxit.FoxitReader`» -> Foxit.FoxitReader."""
+    limpio = (texto or "").strip()
+    limpio = limpio.strip("`*_•-—\"“”‘’ ")
+    limpio = limpio.replace("«", "").replace("»", "")
+    if " o " in limpio.lower():                 # «A o B»: quedarse con el primero
+        limpio = re.split(r"\so\s", limpio, flags=re.IGNORECASE)[0]
+    return limpio.strip(" .,;:()[]<")
+
+
 def instalaciones_de(texto):
-    """[(accion, id_winget)] pedidas por el modelo: INSTALAR / DESINSTALAR."""
+    """[(accion, objetivo)] pedidas por el modelo. El objetivo puede ser id o nombre."""
     salida = []
     for m in INSTALAR_RE.finditer(texto or ""):
-        pieza = (m.group(1).upper(), m.group(2))
+        pieza = (m.group(1).upper(), _limpiar_objetivo(m.group(2)))
         if pieza not in salida:
             salida.append(pieza)
     return salida

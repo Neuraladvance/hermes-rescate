@@ -53,8 +53,12 @@ def buscar(termino, limite=15):
     if rc != 0 and not out:
         return []
     filas = []
+    ruido = ("no package found", "no se encontr", "no installed", "no se ha encontrado",
+             "no se encontraron", "try again", "no applicable", "no packages")
     for linea in out.splitlines():
         if not linea.strip() or linea.lstrip().startswith(("-", "Name", "Nombre")):
+            continue
+        if any(trozo in linea.lower() for trozo in ruido):
             continue
         partes = linea.split()
         if len(partes) < 3:
@@ -62,7 +66,8 @@ def buscar(termino, limite=15):
         # winget alinea columnas: id en la 2a, version en la 3a
         identificador = None
         for i, trozo in enumerate(partes):
-            if "." in trozo and trozo not in ("...",) and i > 0 and not trozo[0].isdigit():
+            if ("." in trozo and not trozo.endswith(".") and trozo not in ("...",)
+                    and i > 0 and not trozo[0].isdigit()):
                 identificador = trozo
                 indice = i
                 break
