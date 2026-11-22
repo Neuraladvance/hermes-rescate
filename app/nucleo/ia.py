@@ -361,8 +361,30 @@ def _peticion_modelo(cfg, mensajes, modelo, timeout):
     except (KeyError, IndexError, TypeError):
         raise RuntimeError("respuesta inesperada: %s" % str(datos)[:150])
     if not contenido or not str(contenido).strip():
+        # Algunos modelos gratuitos devuelven todo el texto en «reasoning» y dejan
+        # «content» vacío. No se tira: se guarda por si ningún modelo da algo mejor.
+        mensaje = datos["choices"][0].get("message") or {}
+        razonamiento = (mensaje.get("reasoning") or mensaje.get("reasoning_content") or "")
+        if str(razonamiento).strip():
+            raise _SoloRazonamiento(str(razonamiento).strip(), modelo)
         raise RuntimeError("respuesta vacía")
     return contenido
+
+
+class _SoloRazonamiento(RuntimeError):
+    """El modelo contestó, pero solo en el campo de razonamiento."""
+
+    def __init__(self, texto, modelo):
+        RuntimeError.__init__(self, "respuesta solo en razonamiento")
+        self.texto = texto
+        self.modelo = modelo
+
+
+def _limpiar_razonamiento(texto):
+    """Recorta el razonamiento a algo legible y en lo posible en español."""
+    lineas = [l.strip() for l in (texto or "").splitlines() if l.strip()]
+    # Quedarse con el tramo final: es donde suele estar la conclusión.
+    return "\n".join(lineas[-24:])[:2500]
 
 
 def _peticion(cfg, mensajes, timeout=75):
@@ -375,15 +397,23 @@ def _peticion(cfg, mensajes, timeout=75):
     if not cadena:
         raise ErrorFatal("No hay ningún modelo configurado (bloque «ia» de config.json).")
     errores = []
+    solo_razonamiento = None
     for modelo in cadena:
         try:
             texto = _peticion_modelo(cfg, mensajes, modelo, timeout)
             return texto, modelo, errores
         except ErrorFatal:
             raise
+        except _SoloRazonamiento as exc:
+            errores.append((exc.modelo, "respondió solo con razonamiento (se usa si no hay nada mejor)"))
+            if solo_razonamiento is None:
+                solo_razonamiento = (exc.texto, exc.modelo)
+            continue
         except RuntimeError as exc:
             errores.append((modelo, str(exc)))
             continue
+    if solo_razonamiento:
+        return _limpiar_razonamiento(solo_razonamiento[0]), solo_razonamiento[1], errores
     detalle = "\n".join("   · %s → %s" % (m, e) for m, e in errores)
     raise RuntimeError(
         "Ninguno de los %d modelos respondió. Comprueba la conexión o cambia de modelo "

@@ -11,6 +11,7 @@ Uso:  runtime\\python\\python.exe tests\\simulacion.py [-v]
 import ast
 import builtins
 import io
+import json
 import os
 import py_compile
 import sys
@@ -218,6 +219,42 @@ def procesos_en_la_auditoria():
     gordos = DATOS.get("procesos_gordos") or []
     return "%d procesos · %d con ventana · %d grandes · %d colgados" % (
         total, len(apps), len(gordos), len(DATOS.get("procesos_colgados") or []))
+
+
+def modelo_solo_razonamiento():
+    """Si un modelo gratuito contesta solo en «reasoning», no se pierde la respuesta."""
+    import urllib.request
+    from nucleo import ia
+
+    class Falsa(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    original = urllib.request.urlopen
+    cfg = {"endpoint": "https://x/v1", "modelo": "m1", "clave": "k", "temperatura": 0.2,
+           "max_tokens": 50, "alternativas": ["m2"], "max_modelos": 3}
+    solo_razon = {"choices": [{"message": {"content": "", "reasoning":
+                                           "Pienso...\nConclusion: usa limpiar_temp."}}]}
+    bueno = {"choices": [{"message": {"content": "Respuesta buena."}}]}
+    casos = [([solo_razon, bueno], "m2", "Respuesta buena"),
+             ([solo_razon, solo_razon], "m1", "Conclusion")]
+    try:
+        for respuestas, modelo_esperado, trozo in casos:
+            cola = list(respuestas)
+
+            def falso(peticion, timeout=None, _cola=cola):
+                return Falsa(json.dumps(_cola.pop(0)).encode())
+
+            urllib.request.urlopen = falso
+            texto, modelo, errores = ia._peticion(cfg, [{"role": "user", "content": "hola"}])
+            assert modelo == modelo_esperado, (modelo, modelo_esperado)
+            assert trozo in texto, texto[:60]
+    finally:
+        urllib.request.urlopen = original
+    return "razonamiento usado solo si no hay nada mejor"
 
 
 # ====================================================================== D. informe
@@ -460,6 +497,7 @@ if __name__ == "__main__":
     check("Lista blanca de consultas", consultas_lista_blanca)
     check("Acciones que piden nombre", acciones_con_nombre)
     check("Procesos en la auditoría", procesos_en_la_auditoria)
+    check("Respuesta solo en «reasoning»", modelo_solo_razonamiento)
 
     seccion("B. Catálogo de reparaciones")
     check("Catálogo íntegro", catalogo_completo)
