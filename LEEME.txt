@@ -127,3 +127,22 @@ SEGURIDAD
 Todo lo ejecutado queda registrado en logs/rescate_AAAAMMDD.log: qué acción,
 cuándo, resultado y duración. Si trabajas en equipos de clientes, ese fichero
 es tu justificante de lo que se tocó y de lo que no.
+
+CRÉDITOS
+--------
+HERMES-RESCATE es un proyecto de Neuraladvance.net — https://neuraladvance.net
+Licencia MIT. Desarrollado con asistencia de IA (modelo DeepSeek a través del
+agente Hermes) y probado en equipos reales.
+Código, aviso legal completo y últimas versiones:
+https://github.com/Neuraladvance/hermes-rescate
+
+AVISO LEGAL (resumen; el texto completo está en DISCLAIMER.md)
+-------------------------------------------------------------
+Se entrega «tal cual», sin garantía de ningún tipo. Modifica la configuración
+del sistema cuando se lo pides: HAZ COPIA DE SEGURIDAD de los datos antes de
+usarlo y úsalo solo en equipos propios o con autorización expresa del
+responsable. Los informes y registros contienen datos del equipo auditado
+(nombre, usuario, serie, MAC, IP, programas y eventos): quien ejecuta el
+programa es responsable de custodiarlos y de cumplir el RGPD si procede. El
+autor del software no recibe ni almacena esos datos.
+

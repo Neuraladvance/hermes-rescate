@@ -2,6 +2,9 @@
 
 **Auditoría y reparación de equipos Windows desde un USB, sin instalar nada.**
 
+Proyecto de [**Neuraladvance.net**](https://neuraladvance.net) · Licencia MIT ·
+[aviso legal y limitación de responsabilidad](DISCLAIMER.md)
+
 Un programa de consola en español que se lleva en el bolsillo: se conecta el USB,
 se abre, y en medio minuto tienes el estado real del equipo y un informe en HTML
 para entregar al cliente. Funciona **sin internet y sin IA**; el chat con un modelo
@@ -115,6 +118,28 @@ las variables de entorno `RESCATE_IA_ENDPOINT`, `RESCATE_IA_MODELO` y `RESCATE_I
   estado de WinRE, ni reparar archivos del sistema. El informe lo dice claramente.
 - Si el equipo no arranca, el programa no sirve: mira `Docs/MODO-FRIO.txt` (WinRE y
   un USB de arranque). Aquí no se incluye ninguna ISO de terceros por licencias.
+
+## Cómo se hizo
+
+Desarrollado por [**Neuraladvance.net**](https://neuraladvance.net) con asistencia de
+IA: modelo **DeepSeek** a través del agente **Hermes** de Nous Research. El código, el
+diagnóstico y el catálogo de reparaciones se revisaron y se probaron ejecutándolos en
+equipos reales; lo que no se pudo probar está anotado con honestidad en
+`Docs/NOTAS-TECNICAS.md`, junto a las trampas de PowerShell que costaron encontrar.
+
+## Aviso legal
+
+Este software se entrega **«tal cual», sin garantía de ningún tipo**. Modifica la
+configuración del sistema cuando se le pide, así que **haz copia de seguridad antes de
+usarlo** y úsalo solo en equipos propios o con autorización expresa del responsable.
+
+Los informes y registros contienen datos del equipo auditado (nombre, usuario, serie,
+MAC, IP, programas y eventos): quien ejecuta el programa es el responsable de
+custodiarlos y de cumplir el RGPD si procede. El autor del software no recibe ni
+almacena esos datos.
+
+El texto completo —garantías, datos personales, terceros, uso de IA y límite de
+responsabilidad— está en **[DISCLAIMER.md](DISCLAIMER.md)**.
 
 ## Licencia
 
