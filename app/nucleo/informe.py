@@ -18,6 +18,13 @@ def _e(texto):
     return html.escape("" if texto is None else str(texto))
 
 
+def _rec(texto, n=140):
+    """Recorta avisando con puntos suspensivos (un corte seco parece un fallo de maquetación)."""
+    texto = "" if texto is None else str(texto).strip()
+    texto = texto.replace("\n", " ")
+    return texto if len(texto) <= n else texto[:n].rstrip() + "…"
+
+
 def _equipo_nombre(so):
     """Evita repetir la marca cuando el modelo ya la incluye («Lenovo Lenovo ThinkPad»)."""
     fabricante = (so.get("fabricante") or "").strip()
@@ -112,7 +119,7 @@ def _hallazgos_html(hallazgos):
         if datos.get("incidentes"):
             filas = "".join("<tr><td>%s</td><td>%s</td><td>%s</td></tr>"
                             % (_e(d.get("id")), _e(_fecha_legible(d.get("fecha"))),
-                               _e((d.get("texto") or "")[:80]))
+                               _e(_rec(d.get("texto"), 110)))
                             for d in datos["incidentes"] if isinstance(d, dict))
             if filas:
                 extra += "<table><tr><th>Código</th><th>Fecha</th><th>Detalle</th></tr>%s</table>" % filas
@@ -287,13 +294,13 @@ def _estabilidad(datos):
     incidentes = datos.get("incidentes") or []
     if incidentes:
         partes.append("<h3>Cierres inesperados (%d en 30 días)</h3>%s" % (len(incidentes), _tabla(
-            [[_e(i.get("id")), _fecha_legible(i.get("fecha")), _e((i.get("texto") or "")[:90])]
+            [[_e(i.get("id")), _fecha_legible(i.get("fecha")), _e(_rec(i.get("texto"), 110))]
              for i in incidentes[:10]], ["Código", "Fecha", "Detalle"])))
     eventos = datos.get("eventos_sistema") or []
     if eventos:
         partes.append("<h3>Errores más repetidos (7 días)</h3>%s" % _tabla(
             [[_e(e.get("origen")), _e(e.get("id")), _e(e.get("veces")), _fecha_legible(e.get("ultimo")),
-              _e((e.get("muestra") or "")[:90])] for e in eventos],
+              _e(_rec(e.get("muestra"), 150))] for e in eventos],
             ["Origen", "Evento", "Veces", "Último", "Mensaje"],
             anchos=("26%", "9%", "9%", "19%", "37%")))
     devs = datos.get("dispositivos_error") or []
@@ -327,7 +334,7 @@ def _anexo(datos):
     arranque = datos.get("arranque") or []
     if arranque:
         partes.append("<h3>Programas al arrancar (%d)</h3>%s" % (len(arranque), _tabla(
-            [[_e(a.get("nombre")), _e((a.get("comando") or "")[:120]), _e(a.get("ubicacion"))]
+            [[_e(a.get("nombre")), _e(_rec(a.get("comando"), 160)), _e(a.get("ubicacion"))]
              for a in arranque], ["Nombre", "Comando", "Ubicación"],
             anchos=("20%", "52%", "28%"))))
     basura = datos.get("basura") or []
