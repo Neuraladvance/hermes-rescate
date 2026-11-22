@@ -108,7 +108,9 @@ QUÉ HACE
 7. Hablar con la IA → opcional. Explica los hallazgos y propone acciones,
    pero SOLO puede ejecutar las del catálogo, y siempre con tu confirmación.
    Antes de enviar nada te dice qué datos salen y seudonimiza el equipo
-   (nombre, usuario, serie, MAC, IP). Sin IA configurada todo lo demás
+   (nombre, usuario, serie, MAC, IP). Si ya has auditado hace menos de 2 horas
+   reutiliza ese análisis (te pregunta) en vez de volver a leer el equipo, y
+   cuando lee, lee en rápido (~15 s): sin IA configurada todo lo demás
    funciona igual: el diagnóstico es determinista, no depende del modelo.
 
 USO SIN MENÚ (para lotes o scripts)

@@ -92,7 +92,8 @@ def relanzar_admin():
 # ------------------------------------------------------------------ auditoria
 def ejecutar_auditoria(con_lento=True):
     inicio = util.time.time() if hasattr(util, "time") else 0
-    print(C.color("\n  Analizando el equipo. Tarda unos 30 segundos: no cierres esta ventana.", C.GRIS))
+    print(C.color("\n  Analizando el equipo. Tarda unos %d segundos: no cierres esta ventana."
+                  % (30 if con_lento else 15), C.GRIS))
     datos = auditoria.auditar(con_lento=con_lento, aviso=lambda m: paso(m))
     datos["_inicio"] = inicio
     hallazgos, resumen = diagnostico.evaluar(datos)
@@ -613,6 +614,55 @@ def _ejecutar_con_confirmacion(rid):
     (bien if registro["ok"] else mal)("%s (%s)" % (registro["mensaje"], _dur(registro.get("segundos"))))
 
 
+# ------------------------------------------------------------------ chat: contexto
+def _ultimo_informe(horas=2.0):
+    """Último informe JSON reciente: (datos, hallazgos, resumen, edad) o None.
+
+    Evita repetir la lectura del equipo cuando ya se ha auditado hace poco.
+    """
+    import glob
+    import time
+    mejor = None
+    for ruta in glob.glob(os.path.join(util.INFORMES, "*.json")):
+        try:
+            edad = time.time() - os.path.getmtime(ruta)
+        except OSError:
+            continue
+        if edad < horas * 3600 and (mejor is None or edad < mejor[0]):
+            mejor = (edad, ruta)
+    if not mejor:
+        return None
+    try:
+        with open(mejor[1], "r", encoding="utf-8") as f:
+            contenido = json.load(f)
+    except Exception:
+        return None
+    datos = contenido.get("datos")
+    if not isinstance(datos, dict) or not (datos.get("so") or {}).get("nombre"):
+        return None
+    hallazgos, resumen = contenido.get("hallazgos"), contenido.get("resumen")
+    if not isinstance(hallazgos, list) or not isinstance(resumen, dict):
+        hallazgos, resumen = diagnostico.evaluar(datos)
+    return datos, hallazgos, resumen, mejor[0]
+
+
+def _contexto_chat():
+    """Datos del equipo para la IA: reutiliza el último informe o audita en rápido."""
+    previo = _ultimo_informe()
+    if previo:
+        datos, hallazgos, resumen, edad = previo
+        minutos = int(edad // 60)
+        cuando = "hace menos de un minuto" if minutos < 1 else "hace %d min" % minutos
+        if preguntar("El chat necesita conocer el equipo. ¿Usar el análisis de %s "
+                     "(sin volver a leerlo)?" % cuando, "s"):
+            bien("Uso ese análisis: %d hallazgos. No se ha vuelto a leer el equipo."
+                 % len(hallazgos))
+            return datos, hallazgos, resumen
+    ojo("Leo el equipo otra vez (hardware, discos, eventos): unos 15 segundos, solo "
+        "para que la IA sepa de qué habla.")
+    return ejecutar_auditoria(con_lento=False)
+
+
 # ------------------------------------------------------------------ menu
 def cabecera():
     so = {}
@@ -839,7 +889,7 @@ def menu_principal():
                 informar(datos, hallazgos, resumen, ejecuciones)
         elif opcion == "7":
             if datos is None:
-                datos, hallazgos, resumen = ejecutar_auditoria()
+                datos, hallazgos, resumen = _contexto_chat()
                 pintar_veredicto(datos, hallazgos, resumen)
             menu_chat(datos, hallazgos, resumen)
         elif opcion == "8":

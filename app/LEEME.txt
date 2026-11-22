@@ -1,0 +1,219 @@
+════════════════════════════════════════════════════════════════════════════
+ HERMES-RESCATE 1.0  ·  auditoría y reparación de equipos Windows
+ Sin instalar nada. Todo vive en este USB.
+════════════════════════════════════════════════════════════════════════════
+
+ANTES DE USARLO: DISCLAIMER
+---------------------------
+En CADA ejecución, el programa muestra el aviso legal y OBLIGA a responder S (sí) o
+N (no) antes de hacer nada. No se recuerda la aceptación anterior a propósito: es un
+recordatorio de que el programa modifica el sistema y de que el riesgo es de quien lo usa.
+  · S  → continúa y lo registra en logs/aceptaciones.jsonl
+  · N  → cierra el programa sin ejecutar nada
+El aviso queda también en el menú, opción 9 «DISCLAIMER · Aviso legal y créditos».
+EL USO DEL PROGRAMA ES BAJO LA RESPONSABILIDAD ÚNICA Y EXCLUSIVA DE QUIEN LO EJECUTA.
+El registro guarda fecha, equipo, usuario, versión y decisión: queda constancia de cada uso.
+Para ejecuciones desatendidas (scripts) se puede responder de antemano:
+    Rescate.bat --acepto --auditar
+Para volver a leer el aviso cuando quieras:
+    Rescate.bat --aviso
+
+CLAVE DE IA (sin contraseña)
+----------------------------
+La clave de OpenRouter se guarda en config\config.json y se usa al abrir el chat, sin
+pedir nada. Los modelos son los gratuitos: cuestan 0 y no hace falta tarjeta.
+
+    Rescate.bat --ia-clave       →  pegar una clave (la primera vez)
+    Rescate.bat --ia-probar      →  comprobar que responde
+
+Protegerla es OPCIONAL (solo si el USB puede perderse y no quieres que nadie use tu
+cuota gratuita):
+
+    Rescate.bat --ia-cifrar      →  cifrarla con contraseña (config\ia.dat)
+    Rescate.bat --ia-contrasena  →  cambiar esa contraseña
+    Dejar en blanco en el prompt →  sigue sin IA, nada se bloquea
+
+SIMULACIÓN COMPLETA (buscar fallos sin tocar el equipo)
+------------------------------------------------------
+    runtime\python\python.exe tests\simulacion.py
+
+Recorre las 9 opciones del menú y las 10 órdenes de la línea de comandos con dobles
+de prueba: no ejecuta ninguna reparación, instalación ni actualización real (solo la
+auditoría y la consulta a Windows Update, que son de lectura). Comprueba además que
+todos los módulos compilan, que los mensajes tienen el formato correcto, que las 41
+reparaciones del catálogo están completas, que las reglas de diagnóstico aguantan
+datos raros (46 escenarios) y que los informes se generan. Añade -v para ver trazas.
+
+CÓMO SE USA
+-----------
+1. Copia esta carpeta completa a la raíz de un USB (mejor USB 3.0).
+2. En el PC averiado, abre «Rescate.bat» (doble clic).
+3. Para reparar de verdad, abre «Rescate-como-admin.bat»: la mitad de las
+   acciones (SFC, DISM, limpieza de Windows Update, drivers) necesitan
+   permisos de administrador. El programa también puede elevarse desde el
+   menú con la opción «A».
+
+No se instala nada en el equipo: no toca el registro más que para los
+cambios que tú autorices, no deja servicios ni tareas programadas, y todo
+lo que escribe (informes y registro) se queda en este USB.
+
+SI EL PC NO TIENE INTERNET
+--------------------------
+Conecta el equipo al hotspot del móvil desde la opción 3 del menú. El SSID y
+la contraseña están en config/wifi.json (la clave guardada está ofuscada).
+Puedes cambiarla desde el propio menú o editando ese fichero:
+
+    { "redes": [ { "nombre": "Hotspot iPhone", "ssid": "iPhone",
+                   "clave": "aqui_la_clave_en_claro", "prioridad": 1 } ] }
+
+Orden recomendado en el móvil: activar el hotspot, activar «Máxima
+compatibilidad» (2,4 GHz) y conectar desde el USB en los siguientes 90
+segundos. El iPhone apaga el hotspot si no se conecta nadie.
+Ojo: la clave queda ofuscada, no cifrada. No uses ahí la misma contraseña
+que en el WiFi de casa.
+
+QUÉ HACE
+--------
+1. Revisar el equipo → auditoría completa en ~30 segundos:
+   hardware, discos y salud SMART/desgaste, batería real (mWh de diseño vs
+   reales), licencia de Windows, Defender, cortafuegos, BitLocker, TPM,
+   Arranque seguro, actualizaciones pendientes, errores del registro,
+   cuelgues y pantallazos, dispositivos con error, servicios caídos,
+   programas al arranque, espacio recuperable, red y DNS, WinRE y puntos
+   de restauración.
+   Genera informe HTML (imprimible, para el cliente), Markdown y JSON con
+   los datos crudos en la carpeta «informes» del USB.
+
+2. Reparar lo recomendado → aplica solo lo que el diagnóstico justifica,
+   separando lo seguro de lo que cambia configuración (eso lo pregunta uno
+   a uno), y verifica el resultado después.
+
+3. Conectar al WiFi del técnico → hotspot del móvil, sin escribir nada.
+
+4. Instalar actualizaciones de Windows → primero CONSULTA qué hay pendiente (sin
+   instalar) y lo enseña en tres grupos: actualizaciones, controladores y
+   firmware/BIOS. Pregunta grupo a grupo; el firmware viene desactivado porque
+   si se corta la corriente a mitad el portátil puede quedar sin arrancar.
+   Instala uno a uno, con progreso, y al final pide reiniciar. Puede tardar horas.
+
+5. Instalar programas → catálogo de habituales (Chrome, 7-Zip, VLC, Adobe
+   Reader, LibreOffice, Zoom, AnyDesk, CPU-Z, CrystalDiskInfo…) o búsqueda
+   libre por winget. Instalación silenciosa.
+
+6. Catálogo de reparaciones → 41 acciones con su nivel de riesgo:
+   limpieza de disco, integridad del sistema, red, impresión, Tienda,
+   Windows Update, seguridad, energía, y procedimientos manuales
+   (sustituir disco, reparar arranque, contraseña local).
+
+7. Hablar con la IA → opcional. Explica los hallazgos y propone acciones,
+   pero SOLO puede ejecutar las del catálogo, y siempre con tu confirmación.
+   Antes de enviar nada te dice qué datos salen y seudonimiza el equipo
+   (nombre, usuario, serie, MAC, IP). Si ya has auditado hace menos de 2 horas
+   reutiliza ese análisis (te pregunta) en vez de volver a leer el equipo, y
+   cuando lee, lee en rápido (~15 s): sin IA configurada todo lo demás
+   funciona igual: el diagnóstico es determinista, no depende del modelo.
+
+USO SIN MENÚ (para lotes o scripts)
+-----------------------------------
+  Rescate.bat --auditar              auditoría + informe, sin preguntar
+  Rescate.bat --auto                 auditoría + reparaciones seguras
+  Rescate.bat --reparar sfc_scan     una acción concreta (o varias con coma)
+  Rescate.bat --listar               catálogo completo con ids
+  Rescate.bat --wifi                 conectar al hotspot
+  Rescate.bat --buscar-actualizaciones  consultar qué hay pendiente (no instala)
+  Rescate.bat --actualizar           instalar actualizaciones y controladores
+  Rescate.bat --drivers              solo controladores
+  Rescate.bat --drivers --con-firmware   incluir BIOS/UEFI (enchufado y con batería)
+  Rescate.bat --instalar 7zip.7zip   instalar un programa de winget
+  Rescate.bat --estado               comprobación rápida del entorno
+  Añade --sin-lento para saltarse Defender/BitLocker/actualizaciones.
+
+CONFIGURAR LA IA (opcional)
+---------------------------
+En config/config.json:
+
+    { "ia": { "endpoint": "https://openrouter.ai/api/v1",
+              "modelo": "nombre-del-modelo",
+              "clave": "tu-clave" } }
+
+La clave se queda en el USB: si el USB se pierde, revócala.
+
+CLAVE CIFRADA (recomendado en un USB)
+-------------------------------------
+    Rescate.bat --ia-clave    pega la clave (no se ve) y ofrece cifrarla
+    Rescate.bat --ia-cifrar   cifra la que ya está en claro
+Si eliges cifrarla, la clave vive en config/ia.dat (ChaCha20 + HMAC-SHA256 + scrypt)
+y config/config.json se queda sin ella. La contraseña se pide al usar la opción 7
+o --ia-probar, y la clave solo existe en memoria mientras dura la sesión.
+Si olvidas la contraseña: borra config/ia.dat y crea otra clave. No hay recuperación.
+
+SIN CLAVE TAMBIÉN SE USA
+------------------------
+El programa no incluye ninguna clave y no puede incluirla: OpenRouter exige clave
+incluso para los modelos gratuitos (sin clave responde error 401). Las claves
+gratuitas son personales y llevan topes por usuario; una clave compartida en un
+repositorio público se agota en horas y la retiran.
+Cada técnico crea la suya, gratis y sin tarjeta, en openrouter.ai > Keys, la pega
+en config/config.json (o desde el menú, opción 7) y comprueba con:
+    Rescate.bat --ia-probar
+Sin clave, TODO lo demás funciona igual: auditar, diagnosticar, reparar, informe,
+actualizaciones, drivers y WiFi no usan IA.
+Si dejas el USB a otra persona, borra antes config/config.json.
+
+
+QUÉ NO HACE (a propósito)
+-------------------------
+· No borra documentos, fotos ni correo. Solo temporales, caché y papelera.
+· No cambia contraseñas ni cuentas de usuario.
+· No instala software de dudosa procedencia ni «optimizadores».
+· No formatea ni reparte discos: eso se hace a mano, con el cliente delante.
+· No ejecuta nada destructivo sin preguntar; lo manual lo explica y no lo toca.
+
+LÍMITES QUE CONVIENE SABER
+--------------------------
+· Necesita que Windows arranque. Si no arranca, mira Docs/MODO-FRIO.txt.
+· En un Windows recién instalado puede no haber driver WiFi: usa cable, o
+  comparte la conexión del móvil por USB.
+· El runtime es Python 3.11 de 64 bits: Windows 10/11 y Windows 8.1/7 SP1 de
+  64 bits. En Windows de 32 bits no arranca.
+· Sin permisos de administrador no puede leer BitLocker, el desgaste del
+  disco, ni el estado de WinRE, y no puede reparar archivos del sistema.
+
+QUÉ HAY DENTRO
+--------------
+  Rescate.bat                  lanzador normal
+  Rescate-como-admin.bat       lanzador con UAC
+  app/rescate.py               programa principal (menú)
+  app/nucleo/                  auditoría, diagnóstico, reparaciones, informe, IA, WiFi
+  app/ps/                      scripts de PowerShell (auditoría, actualizaciones)
+  runtime/python/              Python 3.11 portátil (no se instala)
+  config/wifi.json             redes WiFi/hotspot del técnico
+  config/config.json           ajustes de IA (opcional)
+  informes/                    informes generados (HTML, MD, JSON)
+  logs/                        registro de todo lo ejecutado
+  Docs/                        guía de arranque en frío y notas
+
+SEGURIDAD
+---------
+Todo lo ejecutado queda registrado en logs/rescate_AAAAMMDD.log: qué acción,
+cuándo, resultado y duración. Si trabajas en equipos de clientes, ese fichero
+es tu justificante de lo que se tocó y de lo que no.
+
+CRÉDITOS
+--------
+HERMES-RESCATE es un proyecto de Neuraladvance.net — https://neuraladvance.net
+Licencia MIT. Desarrollado con asistencia de IA (modelo DeepSeek a través del
+agente Hermes) y probado en equipos reales.
+Código, aviso legal completo y últimas versiones:
+https://github.com/Neuraladvance/hermes-rescate
+
+AVISO LEGAL (resumen; el texto completo está en DISCLAIMER.md)
+-------------------------------------------------------------
+Se entrega «tal cual», sin garantía de ningún tipo. Modifica la configuración
+del sistema cuando se lo pides: HAZ COPIA DE SEGURIDAD de los datos antes de
+usarlo y úsalo solo en equipos propios o con autorización expresa del
+responsable. Los informes y registros contienen datos del equipo auditado
+(nombre, usuario, serie, MAC, IP, programas y eventos): quien ejecuta el
+programa es responsable de custodiarlos y de cumplir el RGPD si procede. El
+autor del software no recibe ni almacena esos datos.
+
