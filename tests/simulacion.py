@@ -257,6 +257,65 @@ def modelo_solo_razonamiento():
     return "razonamiento usado solo si no hay nada mejor"
 
 
+def progreso_winget():
+    """winget debe ir contando los pasos, no quedarse callado hasta el final."""
+    import subprocess
+    from nucleo import instalador
+
+    salida = ("Found VLC media player [VideoLAN.VLC] Version 3.0.21\r"
+              "Downloading https://x/vlc.exe\r"
+              "  ####    5%\r  ######## 17%\r  ############## 40%\r  ######## 100%\r"
+              "Successfully verified installer hash\r"
+              "Starting package install...\r"
+              "Successfully installed\r")
+
+    class ProcesoFalso:
+        def __init__(self):
+            self.datos = salida.encode("utf-8")
+            self.pos = 0
+            self.returncode = 0
+            padre = self
+
+            class _Out:
+                def read(self, n=1):
+                    trozo = padre.datos[padre.pos:padre.pos + n]
+                    padre.pos += n
+                    return trozo
+
+            self.stdout = _Out()
+
+        def wait(self):
+            return 0
+
+        def kill(self):
+            pass
+
+    class PopenFalso:
+        def __init__(self, argumentos, **kwargs):
+            self._p = ProcesoFalso()
+
+        def __getattr__(self, nombre):
+            return getattr(self._p, nombre)
+
+    original = subprocess.Popen
+    pasos = []
+    try:
+        subprocess.Popen = PopenFalso
+        ok, texto = instalador.instalar("VideoLAN.VLC", aviso=pasos.append)
+    finally:
+        subprocess.Popen = original
+    if not ok:
+        raise AssertionError("debería darse por bueno")
+    faltan = [lo for lo in ("Paquete encontrado", "Descargando", "verificada", "Instalando",
+                            "Instalado") if not any(lo in p for p in pasos)]
+    if faltan:
+        raise AssertionError("no avisa de: %s" % ", ".join(faltan))
+    porcentajes = sum(1 for p in pasos if "%" in p)
+    if porcentajes < 3:
+        raise AssertionError("no muestra el porcentaje de descarga")
+    return "%d avisos · %d con porcentaje" % (len(pasos), porcentajes)
+
+
 # ====================================================================== D. informe
 def informe_se_genera():
     import rescate
@@ -498,6 +557,7 @@ if __name__ == "__main__":
     check("Acciones que piden nombre", acciones_con_nombre)
     check("Procesos en la auditoría", procesos_en_la_auditoria)
     check("Respuesta solo en «reasoning»", modelo_solo_razonamiento)
+    check("Progreso de winget paso a paso", progreso_winget)
 
     seccion("B. Catálogo de reparaciones")
     check("Catálogo íntegro", catalogo_completo)

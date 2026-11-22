@@ -46,6 +46,95 @@ def _winget(args, timeout=900):
     return rc, (out or ""), (err or "")
 
 
+def _limpio(texto):
+    """winget llena la salida de barras de progreso: dejar el texto legible."""
+    malos = [n for n in range(0, 9)] + [11, 12] + [n for n in range(14, 32)]
+    tabla = {n: None for n in malos}
+    return (texto or "").translate(tabla).strip()
+
+
+def _winget_con_progreso(args, aviso=None, timeout=1800):
+    """Ejecuta winget enseñando lo que va pasando, no al final.
+
+    Devuelve (rc, texto_completo). Los mensajes se pasan a «aviso» según llegan:
+    buscar, descargar (con porcentaje), verificar, instalar, terminar.
+    """
+    aviso = aviso or (lambda *_: None)
+    proceso = subprocess.Popen(
+        ["winget"] + args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        creationflags=util.CREATE_NO_WINDOW, env=util._entorno())
+    trozos, pendiente = [], ""
+    ultimo_aviso = ""
+    porcentaje_visto = -10
+    descargando = False
+    inicio = time.time()
+    while True:
+        bloque = proceso.stdout.read(1)
+        if not bloque:
+            break
+        if time.time() - inicio > timeout:
+            proceso.kill()
+            trozos.append("tiempo de espera agotado")
+            break
+        caracter = bloque.decode("utf-8", "replace")
+        if caracter not in (chr(13), chr(10)):
+            pendiente += caracter
+            continue
+        linea = _limpio(pendiente)
+        pendiente = ""
+        if not linea:
+            continue
+        trozos.append(linea)
+        bajo = linea.lower()
+        mensaje = None
+        if "already installed" in bajo or "ya está instalado" in bajo:
+            mensaje = "Ese programa ya está instalado; compruebo si hay versión nueva."
+        elif "no available upgrade" in bajo or "no newer package" in bajo:
+            mensaje = "No hay versión más nueva: no hay nada que instalar."
+        elif "found " in bajo:
+            mensaje = "Paquete encontrado: %s" % linea.split("Found ", 1)[-1][:90]
+        elif descargando and "%" in linea:
+            porcentaje = None
+            for trozo in linea.replace("%", " % ").split():
+                if trozo.isdigit() and 0 <= int(trozo) <= 100:
+                    porcentaje = int(trozo)
+            if porcentaje is not None and porcentaje >= porcentaje_visto + 10:
+                porcentaje_visto = porcentaje
+                mensaje = "Descargando... %d%%" % porcentaje
+        elif "downloading" in bajo or "descargando" in bajo:
+            descargando = True
+            porcentaje = None
+            for trozo in linea.replace("%", " % ").split():
+                if trozo.isdigit() and 0 <= int(trozo) <= 100:
+                    porcentaje = int(trozo)
+            if porcentaje is not None and porcentaje >= porcentaje_visto + 10:
+                porcentaje_visto = porcentaje
+                mensaje = "Descargando… %d%%" % porcentaje
+            elif porcentaje is None:
+                mensaje = "Descargando el instalador…"
+        elif "verified" in bajo or "hash" in bajo:
+            mensaje = "Descarga verificada (hash correcto)."
+        elif "starting package install" in bajo or "iniciando" in bajo:
+            descargando = False
+            mensaje = "Instalando (puede salir el aviso de Windows)…"
+        elif "successfully installed" in bajo or "instalado correctamente" in bajo:
+            mensaje = "Instalado."
+        elif "uninstall" in bajo and ("success" in bajo or "correctamente" in bajo):
+            mensaje = "Desinstalado."
+        elif "cancel" in bajo or "0x800704c7" in bajo:
+            mensaje = "Windows ha cancelado la operación (suele ser el aviso de permisos)."
+        elif "no applicable" in bajo or "no package found" in bajo:
+            mensaje = "winget no encuentra un instalador aplicable."
+        if mensaje and mensaje != ultimo_aviso:
+            ultimo_aviso = mensaje
+            aviso(mensaje)
+    linea = _limpio(pendiente)
+    if linea:
+        trozos.append(linea)
+    proceso.wait()
+    return proceso.returncode, chr(10).join(trozos)
+
+
 def buscar(termino, limite=15):
     """Busca paquetes en winget. Devuelve lista de dicts."""
     rc, out, err = _winget(["search", termino, "--accept-source-agreements",
@@ -81,16 +170,18 @@ def buscar(termino, limite=15):
     return filas
 
 
-def instalar(paquete_id, timeout=1800):
-    """Instala un paquete. Devuelve (ok, salida)."""
+def instalar(paquete_id, timeout=1800, aviso=None):
+    """Instala un paquete enseñando el progreso. Devuelve (ok, salida)."""
     if not id_valido(paquete_id):
         return False, "Identificador de paquete no válido: %r" % paquete_id
-    rc, out, err = _winget(["install", "--id", paquete_id, "--exact", "--silent",
-                            "--accept-package-agreements", "--accept-source-agreements",
-                            "--disable-interactivity"], timeout=timeout)
-    texto = (out + "\n" + err).strip()
-    ok = rc == 0
-    return ok, texto[-1500:]
+    rc, texto = _winget_con_progreso(
+        ["install", "--id", paquete_id, "--exact", "--silent",
+         "--accept-package-agreements", "--accept-source-agreements",
+         "--disable-interactivity"], aviso=aviso, timeout=timeout)
+    bajo = texto.lower()
+    if "already installed" in bajo or "no available upgrade" in bajo or "no newer package" in bajo:
+        return True, "Ya estaba instalado y no hay versión más nueva." + chr(10) + texto[-1500:]
+    return rc == 0, texto[-2000:]
 
 
 # ------------------------------------------------------------------ Windows Update
@@ -100,12 +191,14 @@ def id_valido(paquete_id):
     return bool(re.match(r"^[A-Za-z0-9._+-]{2,120}$", (paquete_id or "").strip()))
 
 
-def desinstalar(paquete_id, timeout=900):
-    """Desinstala un paquete. Devuelve (ok, salida)."""
-    rc, out, err = _winget(["uninstall", "--id", paquete_id, "--exact", "--silent",
-                            "--disable-interactivity"], timeout=timeout)
-    texto = (out + "\n" + err).strip()
-    return rc == 0, texto[-1500:]
+def desinstalar(paquete_id, timeout=900, aviso=None):
+    """Desinstala un paquete enseñando el progreso. Devuelve (ok, salida)."""
+    if not id_valido(paquete_id):
+        return False, "Identificador de paquete no válido: %r" % paquete_id
+    rc, texto = _winget_con_progreso(
+        ["uninstall", "--id", paquete_id, "--exact", "--silent",
+         "--disable-interactivity"], aviso=aviso, timeout=timeout)
+    return rc == 0, texto[-2000:]
 
 
 def _ejecutar_ps(salida, argumentos_extra, aviso, maximo_s, seguir_fase=True):

@@ -751,11 +751,11 @@ def _ejecutar_instalacion(orden, paquete, pista=None):
     if not preguntar("¿%s «%s»? (puede tardar varios minutos)" % (verbo.lower(), paquete), "n"):
         print("  Cancelado: no se toca nada.")
         return
-    aviso = lambda m: print("      " + C.color(m, C.GRIS))
+    aviso = lambda m: print("      " + C.color(m, C.GRIS), flush=True)
     if orden == "INSTALAR":
-        ok, salida = instalador.instalar(paquete)
+        ok, salida = instalador.instalar(paquete, aviso=aviso)
     else:
-        ok, salida = instalador.desinstalar(paquete)
+        ok, salida = instalador.desinstalar(paquete, aviso=aviso)
     for linea in (salida or "").splitlines()[-10:]:
         print(C.color("    " + linea[:150], C.GRIS))
     (bien if ok else mal)("%s %s: %s" % (verbo.lower(), paquete, "hecho" if ok else "no se completó"))
