@@ -56,7 +56,10 @@ foreach ($t in (Get-ScheduledTask)) {
 $software = @()
 foreach ($base in @('HKLM:\SOFTWARE', 'HKLM:\SOFTWARE\WOW6432Node', 'HKCU:\SOFTWARE')) {
     foreach ($clave in (Get-ChildItem $base)) {
-        $software += ('{"clave":"' + (J-Esc $clave.PSPath) + '","nombre":"' + (J-Esc $clave.PSChildName) + '"}')
+        # Ruta en formato de unidad (HKLM:\SOFTWARE\X), no la ruta interna del proveedor
+        $rutaClave = ($clave.PSPath -replace '^Microsoft\.PowerShell\.Core\Registry::', '')
+        $rutaClave = $rutaClave -replace '^HKEY_LOCAL_MACHINE', 'HKLM:' -replace '^HKEY_CURRENT_USER', 'HKCU:'
+        $software += ('{"clave":"' + (J-Esc $rutaClave) + '","nombre":"' + (J-Esc $clave.PSChildName) + '"}')
     }
 }
 

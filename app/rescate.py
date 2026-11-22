@@ -827,40 +827,49 @@ def _desinstalar_profundo(programa, identificador=None):
         return ok
     desinstalador.tamanos(quedan)
     titulo("Restos encontrados (%d)" % len(quedan))
-    borrables, compartidos = [], []
+    borrables, compartidos, total_mb = [], [], 0.0
     for elemento in quedan:
         marca = {"carpeta": "[carpeta]", "registro": "[registro]", "servicio": "[servicio]",
                  "tarea": "[tarea]"}.get(elemento["tipo"], "[?]")
         tamano = ""
-        if elemento.get("mb"):
-            tamano = " %.1f MB" % elemento["mb"]
+        if elemento.get("mb") is not None:
+            tamano = "  %.1f MB" % elemento["mb"]
+            total_mb += elemento["mb"] or 0
         if elemento.get("intocable"):
-            nota = C.color(" (compartido del sistema: no se toca)", C.AMARILLO)
+            nota = C.color("  (del sistema: no se toca)", C.AMARILLO)
             compartidos.append(elemento)
         elif elemento.get("compartida"):
-            nota = C.color(" (lo usan: %s — no se toca)" % ", ".join(elemento["compartida"][:3]),
+            nota = C.color("  (lo usan: %s — no se toca)" % ", ".join(elemento["compartida"][:3]),
                            C.AMARILLO)
             compartidos.append(elemento)
         else:
             nota = ""
             borrables.append(elemento)
-        print("  %-11s %-44s%s%s" % (marca, (elemento.get("nombre") or "")[:44], tamano, nota))
+        destino = elemento.get("ruta") or elemento.get("nombre")
+        print("  %-11s %s%s%s" % (marca, (destino or "")[:96], tamano, nota))
     print()
     if compartidos:
-        ojo("%d restos son compartidos o del sistema: se dejan como están." % len(compartidos))
+        ojo("%d no se pueden tocar: son del sistema o los usa otro programa." % len(compartidos))
     if not borrables:
-        print("  No hay nada que se pueda borrar sin riesgo.")
+        print("  No hay nada que borrar sin riesgo.")
         return ok
-    if not preguntar("¿Mover los %d restos propios a cuarentena (recuperables)?" % len(borrables),
-                     "n"):
+    if total_mb:
+        print("  Basura del programa: %.1f MB en %d elementos." % (total_mb, len(borrables)))
+    else:
+        print("  %d elementos de basura del programa." % len(borrables))
+    if not es_admin():
+        ojo("Sin administrador solo se podrán borrar los del perfil del usuario: "
+            "Program Files y el registro de máquina necesitan permisos elevados.")
+    if not preguntar("¿Eliminar los %d restos? (se borran, como en Revo)" % len(borrables), "n"):
         print("  No se toca nada. Los restos siguen donde estaban.")
         return ok
-    hechos, fallos = desinstalador.cuarentena(borrables, aviso=aviso)
+    hechos, fallos = desinstalador.eliminar(borrables, aviso=aviso)
     for hecho in hechos:
-        bien(hecho)
+        bien("borrado: %s" % hecho)
     for fallo in fallos:
         mal(fallo)
-    ojo("Lo movido está en logs\cuarentena: se puede recuperar a mano.")
+    if hechos:
+        ojo("Las claves de registro eliminadas tienen copia en logs\respaldos_registro.")
     return ok
 
 

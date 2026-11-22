@@ -29,6 +29,14 @@ VACIAS = {"the", "and", "for", "pro", "home", "free", "version", "edition", "set
           "microsoft", "windows", "corporation", "inc", "ltd", "gmbh", "software"}
 
 
+def _ruta_limpia(ruta):
+    """«Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\X» → «HKLM:\X»."""
+    texto = (ruta or "").replace("Microsoft.PowerShell.Core\Registry::", "")
+    return (texto.replace("HKEY_LOCAL_MACHINE", "HKLM:")
+                 .replace("HKEY_CURRENT_USER", "HKCU:")
+                 .replace("HKEY_CLASSES_ROOT", "HKCR:").replace("HKEY_USERS", "HKU:"))
+
+
 def _normal(texto):
     return re.sub(r"[^a-z0-9]+", " ", (texto or "").lower()).strip()
 
@@ -215,6 +223,67 @@ def tamanos(elementos, maximo=12):
 
 
 # ------------------------------------------------------------------ limpieza
+def eliminar(elementos, aviso=None):
+    """Borra los restos (como Revo). Guarda copia de las claves y lo apunta en el log."""
+    aviso = aviso or (lambda *_: None)
+    respaldos = os.path.join(util.ruta("logs"), "respaldos_registro")
+    hechos, fallos = [], []
+    for elemento in elementos:
+        tipo, ruta = elemento["tipo"], elemento.get("ruta") or ""
+        if tipo == "registro":
+            ruta = _ruta_limpia(ruta)
+        try:
+            if tipo == "carpeta":
+                if not os.path.isdir(ruta):
+                    continue
+                aviso("Borrando carpeta %s" % ruta)
+                util.ps('Remove-Item -LiteralPath "%s" -Recurse -Force' % ruta, timeout=600)
+                if os.path.isdir(ruta):          # comprobar de verdad, no dar por hecho
+                    fallos.append("%s: sigue ahí (¿hace falta administrador?)" % ruta)
+                else:
+                    hechos.append("carpeta %s" % ruta)
+            elif tipo == "registro":
+                os.makedirs(respaldos, exist_ok=True)
+                copia = os.path.join(respaldos, "%s_%d.reg" % (time.strftime("%Y%m%d-%H%M%S"),
+                                                               len(hechos) + 1))
+                rama = ruta.replace("HKEY_LOCAL_MACHINE", "HKLM").replace("HKEY_CURRENT_USER", "HKCU")
+                util.ps('reg export "%s" "%s" /y' % (rama, copia), timeout=60)
+                aviso("Borrando clave %s" % elemento.get("nombre"))
+                util.ps('Remove-Item -LiteralPath "%s" -Recurse -Force' % ruta, timeout=120)
+                _rc, existe, _e = util.ps('if (Test-Path -LiteralPath "%s") { "si" } else { "no" }'
+                                          % ruta, timeout=60)
+                if (existe or "").strip().lower() != "no":
+                    fallos.append("%s: la clave sigue ahí (¿hace falta administrador?)"
+                                  % elemento.get("nombre"))
+                else:
+                    hechos.append("registro %s (copia en %s)" % (ruta, os.path.basename(copia)))
+            elif tipo == "servicio":
+                aviso("Parando y borrando el servicio %s" % ruta)
+                util.ps('Stop-Service -Name "%s" -Force' % ruta, timeout=120)
+                util.ps('sc.exe delete "%s"' % ruta, timeout=60)
+                _rc, queda, _e = util.ps('if (Get-Service -Name "%s" -ErrorAction SilentlyContinue) '
+                                         '{ "si" } else { "no" }' % ruta, timeout=60)
+                if "no" not in (queda or "").lower():
+                    fallos.append("servicio %s: sigue instalado (hace falta administrador)" % ruta)
+                else:
+                    hechos.append("servicio %s" % ruta)
+            elif tipo == "tarea":
+                aviso("Borrando la tarea %s" % ruta)
+                util.ps('Unregister-ScheduledTask -TaskName "%s" -Confirm:$false' % ruta, timeout=60)
+                _rc, queda, _e = util.ps('if (Get-ScheduledTask -TaskName "%s" '
+                                         '-ErrorAction SilentlyContinue) { "si" } else { "no" }' % ruta,
+                                         timeout=60)
+                if "no" not in (queda or "").lower():
+                    fallos.append("tarea %s: sigue ahí" % ruta)
+                else:
+                    hechos.append("tarea %s" % ruta)
+            util.log("RESTO borrado (%s): %s" % (tipo, ruta))
+        except Exception as exc:
+            fallos.append("%s: %s" % (elemento.get("nombre"), exc))
+            util.log("RESTO fallo (%s): %s -> %s" % (tipo, ruta, exc))
+    return hechos, fallos
+
+
 def cuarentena(elementos, aviso=None):
     """Mueve carpetas a una cuarentena y exporta las claves. Devuelve (hechos, fallos)."""
     aviso = aviso or (lambda *_: None)
@@ -224,6 +293,8 @@ def cuarentena(elementos, aviso=None):
     hechos, fallos = [], []
     for elemento in elementos:
         tipo, ruta = elemento["tipo"], elemento.get("ruta") or ""
+        if tipo == "registro":
+            ruta = _ruta_limpia(ruta)
         try:
             if tipo == "carpeta":
                 if not os.path.isdir(ruta):
