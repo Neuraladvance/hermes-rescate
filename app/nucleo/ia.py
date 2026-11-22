@@ -22,6 +22,8 @@ DEFECTO = {
     "temperatura": 0.2,
     "max_tokens": 1200,
     "aviso_privacidad": True,
+    "alternativas": [],
+    "max_modelos": 3,
 }
 
 SISTEMA = """Eres un técnico experto en reparación de ordenadores Windows, trabajando desde un
@@ -71,7 +73,7 @@ def guardar_config(**cambios):
 
 def disponible():
     cfg = config()
-    return bool(cfg["endpoint"] and cfg["modelo"] and cfg["clave"])
+    return bool(cfg["endpoint"] and cfg["clave"] and modelos(cfg))
 
 
 # ------------------------------------------------------------------ seudonimizacion
@@ -194,9 +196,28 @@ def contexto(datos, hallazgos, resumen):
 
 
 # ------------------------------------------------------------------ llamada
-def _peticion(cfg, mensajes, timeout=120):
+class ErrorFatal(RuntimeError):
+    """Fallo en el que no tiene sentido probar otro modelo (clave inválida)."""
+
+
+def modelos(cfg):
+    """Modelo principal + alternativas, sin repetir, como mucho `max_modelos`."""
+    lista = []
+    for nombre in [cfg.get("modelo")] + list(cfg.get("alternativas") or []):
+        nombre = (nombre or "").strip()
+        if nombre and nombre not in lista:
+            lista.append(nombre)
+    try:
+        limite = max(1, int(cfg.get("max_modelos") or 3))
+    except (TypeError, ValueError):
+        limite = 3
+    return lista[:limite]
+
+
+def _peticion_modelo(cfg, mensajes, modelo, timeout):
+    """Una llamada a UN modelo. Lanza ErrorFatal o RuntimeError."""
     cuerpo = json.dumps({
-        "model": cfg["modelo"],
+        "model": modelo,
         "messages": mensajes,
         "temperature": float(cfg.get("temperatura") or 0.2),
         "max_tokens": int(cfg.get("max_tokens") or 1200),
@@ -209,14 +230,56 @@ def _peticion(cfg, mensajes, timeout=120):
         with urllib.request.urlopen(peticion, timeout=timeout) as respuesta:
             datos = json.loads(respuesta.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as exc:
-        detalle = exc.read().decode("utf-8", "replace")[:300]
-        raise RuntimeError("El servidor de IA respondió %s: %s" % (exc.code, detalle))
+        detalle = (exc.read() or b"").decode("utf-8", "replace")[:200].replace("\n", " ")
+        if exc.code in (401, 403):
+            raise ErrorFatal("Clave rechazada por %s (HTTP %s). Revisa la clave."
+                             % (cfg["endpoint"], exc.code))
+        if exc.code == 404:
+            raise RuntimeError("modelo no disponible (HTTP 404)")
+        if exc.code == 429:
+            raise RuntimeError("límite de peticiones alcanzado (HTTP 429)")
+        if exc.code == 402:
+            raise RuntimeError("sin saldo o tope diario (HTTP 402)")
+        raise RuntimeError("HTTP %s: %s" % (exc.code, detalle))
     except Exception as exc:
-        raise RuntimeError("No se pudo hablar con el servidor de IA: %s" % exc)
+        raise RuntimeError("sin respuesta: %s" % exc)
+    if datos.get("error"):
+        mensaje = datos["error"]
+        if isinstance(mensaje, dict):
+            mensaje = mensaje.get("message") or json.dumps(mensaje)[:200]
+        raise RuntimeError("el servidor devolvió error: %s" % str(mensaje)[:200])
     try:
-        return datos["choices"][0]["message"]["content"]
-    except (KeyError, IndexError):
-        raise RuntimeError("Respuesta inesperada del servidor de IA: %s" % str(datos)[:200])
+        contenido = datos["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError):
+        raise RuntimeError("respuesta inesperada: %s" % str(datos)[:150])
+    if not contenido or not str(contenido).strip():
+        raise RuntimeError("respuesta vacía")
+    return contenido
+
+
+def _peticion(cfg, mensajes, timeout=75):
+    """Recorre la cadena de modelos: el primero que responda, responde.
+
+    Devuelve (texto, modelo_usado, errores). Si fallan todos lanza RuntimeError
+    con el motivo de cada uno, para que el técnico sepa qué ha pasado.
+    """
+    cadena = modelos(cfg)
+    if not cadena:
+        raise ErrorFatal("No hay ningún modelo configurado (bloque «ia» de config.json).")
+    errores = []
+    for modelo in cadena:
+        try:
+            texto = _peticion_modelo(cfg, mensajes, modelo, timeout)
+            return texto, modelo, errores
+        except ErrorFatal:
+            raise
+        except RuntimeError as exc:
+            errores.append((modelo, str(exc)))
+            continue
+    detalle = "\n".join("   · %s → %s" % (m, e) for m, e in errores)
+    raise RuntimeError(
+        "Ninguno de los %d modelos respondió. Comprueba la conexión o cambia de modelo "
+        "en config/config.json:\n%s" % (len(errores), detalle))
 
 
 ACCION_RE = re.compile(r"^\s*ACCI[ÓO]N\s*:\s*([a-z0-9_]+)\s*$", re.IGNORECASE | re.MULTILINE)
@@ -232,6 +295,8 @@ class Agente:
     def __init__(self, datos, hallazgos, resumen, cfg=None):
         self.cfg = cfg or config()
         self.seudonimo = Seudonimo(datos)
+        self.ultimo_modelo = None
+        self.ultimos_errores = []
         self.contexto = self.seudonimo.aplicar(contexto(datos, hallazgos, resumen))
         self.mensajes = [
             {"role": "system", "content": SISTEMA},
@@ -239,11 +304,13 @@ class Agente:
         ]
 
     def preguntar(self, texto):
-        """Devuelve (respuesta, acciones_sugeridas)."""
+        """Devuelve (respuesta, acciones_sugeridas). Salta de modelo si uno falla."""
         self.mensajes.append({"role": "user", "content": self.seudonimo.aplicar(texto)})
         if len(self.mensajes) > 24:
             self.mensajes = self.mensajes[:2] + self.mensajes[-20:]
-        bruto = _peticion(self.cfg, self.mensajes)
+        bruto, modelo, errores = _peticion(self.cfg, self.mensajes)
+        self.ultimo_modelo = modelo
+        self.ultimos_errores = errores
         self.mensajes.append({"role": "assistant", "content": bruto})
         acciones = [a for a in acciones_de(bruto) if reparaciones.obtener(a)]
         return self.seudonimo.restaurar(bruto), acciones
@@ -265,12 +332,29 @@ class Agente:
 
 
 def probar(cfg=None):
-    """Comprobación rápida de que el endpoint y la clave funcionan."""
+    """Prueba la cadena de modelos y cuenta dónde funciona y dónde falla."""
     cfg = cfg or config()
-    if not disponible():
-        return False, "Falta endpoint, modelo o clave en config/config.json (bloque «ia»)."
-    try:
-        respuesta = _peticion(cfg, [{"role": "user", "content": "Responde solo: OK"}], timeout=60)
-        return True, "El servidor de IA responde: %s" % respuesta.strip()[:80]
-    except RuntimeError as exc:
-        return False, str(exc)
+    if not cfg.get("endpoint"):
+        return False, "Falta «endpoint» en config/config.json (bloque «ia»)."
+    if not cfg.get("clave"):
+        return False, ("Falta la «clave» en config/config.json: pégala desde "
+                       "openrouter.ai → Keys. Sin clave no se envía nada.")
+    cadena = modelos(cfg)
+    if not cadena:
+        return False, "No hay ningún modelo configurado en config/config.json."
+    lineas = []
+    for indice, modelo in enumerate(cadena, 1):
+        try:
+            respuesta = _peticion_modelo(cfg, [{"role": "user", "content": "Responde solo: OK"}],
+                                         modelo, 60)
+            lineas.append("  %d. ✓ %s → %s" % (indice, modelo, respuesta.strip()[:60]))
+            return True, "\n".join(lineas)
+        except ErrorFatal as exc:
+            lineas.append("  %d. ✗ %s → %s" % (indice, modelo, exc))
+            lineas.append("  La clave es el problema: no tiene sentido probar el resto.")
+            return False, "\n".join(lineas)
+        except RuntimeError as exc:
+            lineas.append("  %d. ✗ %s → %s" % (indice, modelo, exc))
+    lineas.append("  Ningún modelo de la cadena respondió. Prueba a añadir otro en "
+                  "«alternativas» o más tarde (los gratuitos tienen topes diarios).")
+    return False, "\n".join(lineas)

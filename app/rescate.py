@@ -368,6 +368,8 @@ def menu_chat(datos, hallazgos, resumen):
                 bien("Guardada en config/config.json")
         return
     agente = ia.Agente(datos, hallazgos, resumen, cfg)
+    print("  Cadena de modelos: %s" % " → ".join(ia.modelos(cfg)))
+    print("  Si uno falla (tope diario, modelo retirado), salta al siguiente.")
     print(agente.aviso_privacidad())
     if not preguntar("¿Enviar este resumen y empezar la conversación?", "n"):
         print("  Cancelado: no se ha enviado nada.")
@@ -390,6 +392,10 @@ def menu_chat(datos, hallazgos, resumen):
         except RuntimeError as exc:
             mal(str(exc))
             continue
+        if agente.ultimos_errores:
+            ojo("Respondió %s (fallaron: %s)"
+                % (agente.ultimo_modelo,
+                   ", ".join(m for m, _ in agente.ultimos_errores)))
         print("\n" + "\n".join("  " + linea for linea in respuesta.splitlines()) + "\n")
         for rid in acciones:
             r = reparaciones.obtener(rid)
@@ -565,13 +571,16 @@ def main():
         return 0
     if "--ia-probar" in argumentos:
         from nucleo import ia
-        titulo("Prueba del modelo de IA")
+        titulo("Prueba de la cadena de modelos")
         cfg = ia.config()
         print("  endpoint: %s" % (cfg["endpoint"] or "(vacío)"))
-        print("  modelo  : %s" % (cfg["modelo"] or "(vacío)"))
         print("  clave   : %s" % ("configurada" if cfg["clave"] else "NO configurada"))
+        print("  cadena  : %s" % (" → ".join(ia.modelos(cfg)) or "(ningún modelo)"))
+        print()
         ok, mensaje = ia.probar(cfg)
-        (bien if ok else mal)(mensaje)
+        print(mensaje)
+        print()
+        (bien if ok else mal)("Modelo operativo." if ok else "Ningún modelo disponible ahora mismo.")
         return 0 if ok else 1
     if "--listar" in argumentos:
         titulo("Catálogo de reparaciones")

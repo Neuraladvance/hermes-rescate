@@ -5,7 +5,13 @@
     "clave": "tu-clave",
     "temperatura": 0.2,
     "max_tokens": 1200,
-    "aviso_privacidad": true
+    "aviso_privacidad": true,
+    "alternativas": [
+      "openrouter/free",
+      "google/gemma-4-26b-a4b-it:free",
+      "nvidia/nemotron-3-super-vl:free"
+    ],
+    "max_modelos": 3
   },
-  "nota": "Opcional. Renombra este fichero a config.json y rellena endpoint, modelo y clave de cualquier API compatible con OpenAI. Sin esto el programa funciona igual: la auditoría y las reparaciones no usan IA. La clave se guarda en el USB: si pierdes el USB, revócala."
+  "nota": "Opcional. Renombra este fichero a config.json y rellena endpoint, modelo y clave de cualquier API compatible con OpenAI. Sin esto el programa funciona igual: la auditoría y las reparaciones no usan IA. CADENA DE MODELOS: se usa «modelo» y, si falla (tope diario, modelo retirado, sin respuesta), salta a «alternativas» en orden hasta «max_modelos» (3). Si fallan todos, el programa lo dice modelo por modelo en vez de quedarse callado. «openrouter/free» elige solo entre los gratuitos disponibles en ese momento. La clave se guarda en el USB: si lo pierdes, revócala."
 }
