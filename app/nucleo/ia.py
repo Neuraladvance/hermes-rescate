@@ -117,8 +117,16 @@ Reglas:
   ACCION: reiniciar_proceso Dropbox
   ACCION: reiniciar_servicio Spooler
   El programa pide confirmación al técnico y te devuelve el resultado.
-- Flujo natural: consulta para leer → interpreta → si hay un fallo que se puede arreglar,
-  propón la ACCION concreta. Nada de consejos genéricos de manual: usa los datos del equipo.
+- INSTALAR / DESINSTALAR programas: no digas que "solo hay actualizaciones". Puedes pedir
+  la instalación de cualquier programa del catálogo de winget (y quitar uno instalado):
+  INSTALAR: Foxit.FoxitReader
+  DESINSTALAR: Foxit.FoxitReader
+  Para acertar el identificador exacto, primero pide CONSULTA: winget search <nombre> o
+  CONSULTA: winget show <id>. El programa enseña lo que vas a instalar, pide confirmación al
+  técnico y te devuelve la salida de winget.
+- Flujo natural: consulta para leer → interpreta → si hay un fallo o falta un programa,
+  propón la ACCION o la INSTALAR concreta. Nada de consejos genéricos de manual: usa los
+  datos del equipo y actúa.
 """
 
 
@@ -423,6 +431,8 @@ def _peticion(cfg, mensajes, timeout=75):
 ACCION_RE = re.compile(r"^\s*ACCI[ÓO]N\s*:\s*([a-z0-9_]+)(?:\s+(.+?))?\s*$",
                         re.IGNORECASE | re.MULTILINE)
 CONSULTA_RE = re.compile(r"^\s*CONSULTA\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+INSTALAR_RE = re.compile(r"^\s*(INSTALAR|DESINSTALAR)\s*:\s*([A-Za-z0-9._+-]{2,120})\s*$",
+                         re.IGNORECASE | re.MULTILINE)
 
 
 def acciones_de(texto):
@@ -432,6 +442,16 @@ def acciones_de(texto):
         piezas = {"id": m.group(1).lower(), "parametro": (m.group(2) or "").strip()}
         if piezas not in salida:
             salida.append(piezas)
+    return salida
+
+
+def instalaciones_de(texto):
+    """[(accion, id_winget)] pedidas por el modelo: INSTALAR / DESINSTALAR."""
+    salida = []
+    for m in INSTALAR_RE.finditer(texto or ""):
+        pieza = (m.group(1).upper(), m.group(2))
+        if pieza not in salida:
+            salida.append(pieza)
     return salida
 
 
@@ -468,9 +488,11 @@ class Agente:
         self.ultimo_modelo = modelo
         self.ultimos_errores = errores
         self.ultimas_consultas = []
+        self.ultimas_instalaciones = []
         self.mensajes.append({"role": "assistant", "content": bruto})
         acciones = [a for a in acciones_de(bruto) if reparaciones.obtener(a["id"])]
         self.ultimas_consultas = consultas_de(bruto)
+        self.ultimas_instalaciones = instalaciones_de(bruto)
         return self.seudonimo.restaurar(bruto), acciones
 
     def aviso_privacidad(self):

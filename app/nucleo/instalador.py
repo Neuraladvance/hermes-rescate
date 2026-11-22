@@ -78,6 +78,8 @@ def buscar(termino, limite=15):
 
 def instalar(paquete_id, timeout=1800):
     """Instala un paquete. Devuelve (ok, salida)."""
+    if not id_valido(paquete_id):
+        return False, "Identificador de paquete no válido: %r" % paquete_id
     rc, out, err = _winget(["install", "--id", paquete_id, "--exact", "--silent",
                             "--accept-package-agreements", "--accept-source-agreements",
                             "--disable-interactivity"], timeout=timeout)
@@ -87,6 +89,20 @@ def instalar(paquete_id, timeout=1800):
 
 
 # ------------------------------------------------------------------ Windows Update
+def id_valido(paquete_id):
+    """Un id de winget: letras, numeros, punto, guion, guion bajo y mas. Nada mas."""
+    import re
+    return bool(re.match(r"^[A-Za-z0-9._+-]{2,120}$", (paquete_id or "").strip()))
+
+
+def desinstalar(paquete_id, timeout=900):
+    """Desinstala un paquete. Devuelve (ok, salida)."""
+    rc, out, err = _winget(["uninstall", "--id", paquete_id, "--exact", "--silent",
+                            "--disable-interactivity"], timeout=timeout)
+    texto = (out + "\n" + err).strip()
+    return rc == 0, texto[-1500:]
+
+
 def _ejecutar_ps(salida, argumentos_extra, aviso, maximo_s, seguir_fase=True):
     """Lanza actualizar.ps1 y devuelve el JSON final. Compartido por buscar e instalar."""
     if os.path.exists(salida):

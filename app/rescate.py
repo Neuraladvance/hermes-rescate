@@ -578,7 +578,7 @@ def menu_chat(datos, hallazgos, resumen):
     if not preguntar("¿Enviar este resumen y empezar la conversación?", "n"):
         print("  Cancelado: no se ha enviado nada.")
         return
-    print("\n  Escribe tu pregunta. «salir» para terminar, «accion <id>» para ejecutar una del catálogo.\n")
+    print("\n  Escribe tu pregunta. «salir» para terminar, «accion <id>» para ejecutar una del catálogo, «instalar <id>» para winget.\n")
     while True:
         try:
             texto = input(C.color("  tú › ", C.CIAN)).strip()
@@ -617,6 +617,8 @@ def menu_chat(datos, hallazgos, resumen):
             print("\n" + "\n".join("  " + linea for linea in respuesta.splitlines()) + "\n")
             consultas = list(getattr(agente, "ultimas_consultas", []) or [])
             vueltas += 1
+        for orden, paquete in list(getattr(agente, "ultimas_instalaciones", []) or [])[:3]:
+            _ejecutar_instalacion(orden, paquete)
         for accion in acciones:
             r = reparaciones.obtener(accion["id"])
             if not r:
@@ -627,6 +629,31 @@ def menu_chat(datos, hallazgos, resumen):
             if preguntar("La IA propone «%s». ¿Ejecutarla?" % nombre, "n"):
                 _ejecutar_con_confirmacion(accion["id"], accion.get("parametro"),
                                            confirmado=True)
+
+
+def _ejecutar_instalacion(orden, paquete):
+    """Instala o desinstala un programa con winget, con confirmación."""
+    from nucleo import instalador
+    if not instalador.id_valido(paquete):
+        mal("Identificador de paquete no válido: %s" % paquete)
+        return
+    if not instalador.winget_disponible():
+        mal("winget no está disponible en este equipo (hace falta Windows 11 con App Installer).")
+        return
+    verbo = "Instalar" if orden == "INSTALAR" else "Desinstalar"
+    print()
+    paso("%s con winget: %s" % (verbo, paquete))
+    if not preguntar("¿%s «%s»? (puede tardar varios minutos)" % (verbo.lower(), paquete), "n"):
+        print("  Cancelado: no se toca nada.")
+        return
+    aviso = lambda m: print("      " + C.color(m, C.GRIS))
+    if orden == "INSTALAR":
+        ok, salida = instalador.instalar(paquete)
+    else:
+        ok, salida = instalador.desinstalar(paquete)
+    for linea in (salida or "").splitlines()[-10:]:
+        print(C.color("    " + linea[:150], C.GRIS))
+    (bien if ok else mal)("%s %s: %s" % (verbo.lower(), paquete, "hecho" if ok else "no se completó"))
 
 
 def _ejecutar_consultas(comandos):
