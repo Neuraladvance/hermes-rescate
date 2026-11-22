@@ -104,6 +104,15 @@ En config/config.json:
 
 La clave se queda en el USB: si el USB se pierde, revócala.
 
+CLAVE CIFRADA (recomendado en un USB)
+-------------------------------------
+    Rescate.bat --ia-clave    pega la clave (no se ve) y ofrece cifrarla
+    Rescate.bat --ia-cifrar   cifra la que ya está en claro
+Si eliges cifrarla, la clave vive en config/ia.dat (ChaCha20 + HMAC-SHA256 + scrypt)
+y config/config.json se queda sin ella. La contraseña se pide al usar la opción 7
+o --ia-probar, y la clave solo existe en memoria mientras dura la sesión.
+Si olvidas la contraseña: borra config/ia.dat y crea otra clave. No hay recuperación.
+
 SIN CLAVE TAMBIÉN SE USA
 ------------------------
 El programa no incluye ninguna clave y no puede incluirla: OpenRouter exige clave
