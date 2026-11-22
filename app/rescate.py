@@ -420,6 +420,7 @@ def cabecera():
     print(C.color("\n  HERMES-RESCATE 1.0", C.NEGRITA + ";" + C.CIAN)
           + C.color("  ·  auditoría y reparación de equipos Windows", C.GRIS))
     print(C.color("  " + "═" * (ANCHO - 2), C.GRIS))
+    print(C.color("  Proyecto de Neuraladvance.net · licencia MIT · aviso legal: opción 9", C.GRIS))
     print("  Equipo: %s   Usuario: %s   Admin: %s"
           % (os.environ.get("COMPUTERNAME"), os.environ.get("USERNAME"),
              C.color("sí", C.VERDE) if es_admin() else C.color("NO", C.AMARILLO)))
@@ -430,6 +431,44 @@ def cabecera():
     except Exception:
         pass
     print("  USB: %s" % os.path.dirname(RAIZ_APP))
+
+
+# ------------------------------------------------------------------ aviso legal
+TEXTO_AVISO = """
+  HERMES-RESCATE es un proyecto de Neuraladvance.net (https://neuraladvance.net),
+  publicado con licencia MIT.
+
+  Se entrega «tal cual», SIN GARANTÍA de ningún tipo. Modifica la configuración
+  del sistema cuando se le pide: haz copia de seguridad de los datos antes de
+  usarlo y úsalo solo en equipos propios o con autorización expresa del
+  responsable del equipo.
+
+  Los informes y registros contienen datos del equipo auditado (nombre, usuario,
+  número de serie, MAC, IP, programas y eventos). Quien ejecuta el programa es
+  el responsable de custodiarlos y de cumplir el RGPD si procede. El autor del
+  software no recibe ni almacena esos datos.
+
+  El aviso completo (garantías, terceros, límites de la IA y responsabilidad)
+  está en el fichero DISCLAIMER.md que viaja en este mismo USB.
+
+  Desarrollado con asistencia de IA (modelo DeepSeek a través del agente Hermes)
+  y probado en equipos reales.
+"""
+
+
+def menu_aviso():
+    titulo("Aviso legal y créditos")
+    print(TEXTO_AVISO)
+    ruta = os.path.join(util.RAIZ, "DISCLAIMER.md")
+    if os.path.exists(ruta):
+        print("  Fichero completo: %s" % ruta)
+        if preguntar("¿Abrirlo con el programa predeterminado?", "n"):
+            try:
+                os.startfile(ruta)
+            except Exception as exc:
+                mal("No se pudo abrir: %s" % exc)
+    else:
+        ojo("No encuentro DISCLAIMER.md en el USB (debería estar junto a Rescate.bat).")
 
 
 def menu_principal():
@@ -448,6 +487,7 @@ def menu_principal():
         print("  6. Catálogo de reparaciones")
         print("  7. Hablar con la IA")
         print("  8. Abrir la carpeta de informes")
+        print("  9. Aviso legal y créditos")
         print("  0. Salir")
         try:
             opcion = input(C.color("\n  Opción: ", C.NEGRITA)).strip().lower()
@@ -489,6 +529,8 @@ def menu_principal():
             menu_chat(datos, hallazgos, resumen)
         elif opcion == "8":
             os.startfile(util.INFORMES)
+        elif opcion == "9":
+            menu_aviso()
         else:
             ojo("Opción no válida.")
 
@@ -517,6 +559,9 @@ def main():
 
     if "--estado" in argumentos:
         menu_estado()
+        return 0
+    if "--aviso" in argumentos:
+        menu_aviso()
         return 0
     if "--listar" in argumentos:
         titulo("Catálogo de reparaciones")

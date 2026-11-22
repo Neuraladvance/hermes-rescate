@@ -421,7 +421,10 @@ def construir_html(datos, hallazgos, resumen, ejecuciones=None):
 %s
 <h2>Anexo</h2>
 %s
-<div class="pie">Generado por HERMES-RESCATE v%s · %s · duración de la auditoría %.1f s · %s</div>
+<div class="pie">Generado por HERMES-RESCATE v%s · %s · duración de la auditoría %.1f s · %s<br>
+HERMES-RESCATE es un proyecto de <a href="https://neuraladvance.net">Neuraladvance.net</a>,
+licencia MIT. Se entrega «tal cual», sin garantía: úsalo solo en equipos propios o con
+autorización de su responsable, y haz copia de seguridad antes de reparar.</div>
 </div></body></html>
 """ % (
         _e(datos.get("equipo")), _e(time.strftime("%d/%m/%Y")),
