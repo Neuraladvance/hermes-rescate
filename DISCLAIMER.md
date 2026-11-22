@@ -3,11 +3,13 @@
 ## 0. Responsabilidad única y exclusiva del usuario
 
 **EL USO DE ESTE PROGRAMA ES BAJO LA RESPONSABILIDAD ÚNICA Y EXCLUSIVA DE QUIEN LO
-EJECUTA.** Antes de usarlo por primera vez, el programa muestra este aviso y exige una
-respuesta explícita: **ACEPTO** o **REHUSO**. Si se rehúsa, el programa se cierra y no
-ejecuta ninguna acción. La decisión queda registrada en `logs/aceptaciones.jsonl`
-(fecha, equipo, usuario y versión), de modo que siempre puede saberse quién aceptó y
-cuándo en cada máquina.
+EJECUTA.** En **cada ejecución**, el programa muestra este aviso y exige una respuesta
+explícita: **ACEPTO** o **REHUSO**. Si se rehúsa, el programa se cierra y no ejecuta
+ninguna acción. La aceptación no se recuerda de una vez para siempre a propósito: el aviso
+es un recordatorio de que el programa modifica la configuración del sistema y de que el
+riesgo lo asume quien lo ejecuta. Cada decisión queda registrada en
+`logs/aceptaciones.jsonl` (fecha, equipo, usuario, versión, decisión y origen), de modo que
+queda constancia de cada uso.
 
 Nadie más —ni el autor, ni los colaboradores, ni el proveedor del modelo de IA— responde
 de las consecuencias del uso: ni de los daños en el equipo, ni de la pérdida de datos,

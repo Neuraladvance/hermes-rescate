@@ -5,19 +5,18 @@
 
 ANTES DE USARLO: DISCLAIMER
 ---------------------------
-La primera vez que se ejecuta en un equipo, el programa muestra el aviso legal y
-OBLIGA a responder ACEPTO o REHUSO:
+En CADA ejecución, el programa muestra el aviso legal y OBLIGA a responder ACEPTO o
+REHUSO antes de hacer nada. No se recuerda la aceptación anterior a propósito: es un
+recordatorio de que el programa modifica el sistema y de que el riesgo es de quien lo usa.
   · ACEPTO  → continúa y lo registra en logs/aceptaciones.jsonl
   · REHUSO  → cierra el programa sin ejecutar nada
 El aviso queda también en el menú, opción 9 «DISCLAIMER · Aviso legal y créditos».
 EL USO DEL PROGRAMA ES BAJO LA RESPONSABILIDAD ÚNICA Y EXCLUSIVA DE QUIEN LO EJECUTA.
-El registro guarda fecha, equipo, usuario y versión: sirve para saber quién aceptó
-en cada máquina. Para aceptar desde la línea de órdenes (sin preguntas):
-    Rescate.bat --acepto
+El registro guarda fecha, equipo, usuario, versión y decisión: queda constancia de cada uso.
+Para ejecuciones desatendidas (scripts) se puede responder de antemano:
+    Rescate.bat --acepto --auditar
 Para volver a leer el aviso cuando quieras:
     Rescate.bat --aviso
-Para que vuelva a preguntar (revocar la aceptación de este equipo):
-    Rescate.bat --olvidar-acepto
 
 CÓMO SE USA
 -----------

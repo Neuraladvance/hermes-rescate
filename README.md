@@ -132,16 +132,17 @@ antes `config/config.json` y `config/ia.dat`.
 
 ## Antes de usarlo: DISCLAIMER obligatorio
 
-La primera vez que se ejecuta en un equipo, el programa muestra el aviso legal y **no
-deja continuar sin una respuesta explícita**: `ACEPTO` o `REHUSO`. Si se rehúsa, se
-cierra sin ejecutar nada. La decisión se registra en `logs/aceptaciones.jsonl` (fecha,
-equipo, usuario y versión), así que en cada máquina queda constancia de quién aceptó y
-cuándo. El aviso completo está en [DISCLAIMER.md](DISCLAIMER.md).
+En **cada ejecución**, el programa muestra el aviso legal y **no deja continuar sin una
+respuesta explícita**: `ACEPTO` o `REHUSO`. Si se rehúsa, se cierra sin ejecutar nada. No
+se recuerda la aceptación anterior a propósito: el aviso es un recordatorio de que el
+programa modifica el sistema y de que el riesgo es de quien lo usa. La decisión se
+registra en `logs/aceptaciones.jsonl` (fecha, equipo, usuario, versión y decisión). El
+aviso completo está en [DISCLAIMER.md](DISCLAIMER.md).
 
 El uso del programa es bajo la **responsabilidad única y exclusiva** de quien lo ejecuta.
 
-- `Rescate.bat --aviso` — volver a leerlo
-- `Rescate.bat --acepto` — aceptar sin preguntas (instalaciones desatendidas)
+- `Rescate.bat --aviso` — leerlo sin arrancar el programa
+- `Rescate.bat --acepto --auditar` — responder de antemano en un script desatendido
 
 ## Cómo está hecho
 

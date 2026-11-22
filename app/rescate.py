@@ -610,10 +610,9 @@ def _aceptaciones():
 
 
 def _ya_aceptado():
-    """Manda la ÚLTIMA decisión registrada para este equipo y versión.
+    """Ya no se usa para saltar el aviso: ahora se pide en CADA ejecución.
 
-    Así se puede revocar con `--olvidar-acepto` sin borrar el histórico: la
-    auditoría de quién aceptó y cuándo queda intacta.
+    Se conserva el registro como auditoría (quién aceptó, cuándo y desde dónde).
     """
     huella = _huella_equipo()
     ultima = None
@@ -644,13 +643,19 @@ def _registrar_aceptacion(decision, origen="inicio"):
     return fila
 
 
-def puerta_disclaimer():
-    """Muestra el aviso y exige ACEPTO antes de usar el programa.
+def puerta_disclaimer(automatico=False):
+    """Muestra el aviso y exige ACEPTO **en cada ejecución**.
 
-    Devuelve True si se puede continuar. Si ya hay un ACEPTO registrado para este
-    equipo y esta versión, no vuelve a preguntar.
+    No se recuerda la aceptación anterior a propósito: el aviso es un recordatorio de
+    que el programa modifica el sistema y de que el riesgo es de quien lo usa. Cada
+    decisión queda registrada en logs/aceptaciones.jsonl.
+
+    `automatico` (orden --acepto) responde ACEPTO sin preguntar, para ejecuciones
+    desatendidas; queda registrado con origen «parametro».
     """
-    if _ya_aceptado():
+    if automatico:
+        _registrar_aceptacion("ACEPTO", origen="parametro")
+        print(C.color("\n  Aviso aceptado por parámetro (--acepto).", C.GRIS))
         return True
     linea = C.color("  " + "═" * (ANCHO - 2), C.AMARILLO)
     print()
@@ -775,15 +780,10 @@ def main():
     if "--aviso" in argumentos:
         menu_aviso()
         return 0
-    if "--acepto" in argumentos:
-        _registrar_aceptacion("ACEPTO", origen="cli")
-        bien("Aceptación del DISCLAIMER registrada para este equipo.")
-        return 0
     if "--olvidar-acepto" in argumentos:
-        _registrar_aceptacion("REVOCADO", origen="cli")
-        bien("Aceptación revocada para este equipo: la próxima vez se volverá a preguntar.")
+        ojo("Ya no hace falta: el aviso sale en CADA ejecución.")
         return 0
-    if not puerta_disclaimer():
+    if not puerta_disclaimer(automatico="--acepto" in argumentos):
         return 2
     if "--estado" in argumentos:
         menu_estado()
