@@ -610,12 +610,17 @@ def _aceptaciones():
 
 
 def _ya_aceptado():
+    """Manda la ÚLTIMA decisión registrada para este equipo y versión.
+
+    Así se puede revocar con `--olvidar-acepto` sin borrar el histórico: la
+    auditoría de quién aceptó y cuándo queda intacta.
+    """
     huella = _huella_equipo()
+    ultima = None
     for fila in _aceptaciones():
-        if (fila.get("equipo") == huella and fila.get("version") == VERSION
-                and fila.get("decision") == "ACEPTO"):
-            return True
-    return False
+        if fila.get("equipo") == huella and fila.get("version") == VERSION:
+            ultima = fila.get("decision")
+    return ultima == "ACEPTO"
 
 
 def _registrar_aceptacion(decision, origen="inicio"):
@@ -773,6 +778,10 @@ def main():
     if "--acepto" in argumentos:
         _registrar_aceptacion("ACEPTO", origen="cli")
         bien("Aceptación del DISCLAIMER registrada para este equipo.")
+        return 0
+    if "--olvidar-acepto" in argumentos:
+        _registrar_aceptacion("REVOCADO", origen="cli")
+        bien("Aceptación revocada para este equipo: la próxima vez se volverá a preguntar.")
         return 0
     if not puerta_disclaimer():
         return 2

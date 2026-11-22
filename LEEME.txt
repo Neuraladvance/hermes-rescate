@@ -16,6 +16,8 @@ en cada máquina. Para aceptar desde la línea de órdenes (sin preguntas):
     Rescate.bat --acepto
 Para volver a leer el aviso cuando quieras:
     Rescate.bat --aviso
+Para que vuelva a preguntar (revocar la aceptación de este equipo):
+    Rescate.bat --olvidar-acepto
 
 CÓMO SE USA
 -----------
