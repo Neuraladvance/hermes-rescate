@@ -563,6 +563,16 @@ def main():
     if "--aviso" in argumentos:
         menu_aviso()
         return 0
+    if "--ia-probar" in argumentos:
+        from nucleo import ia
+        titulo("Prueba del modelo de IA")
+        cfg = ia.config()
+        print("  endpoint: %s" % (cfg["endpoint"] or "(vacío)"))
+        print("  modelo  : %s" % (cfg["modelo"] or "(vacío)"))
+        print("  clave   : %s" % ("configurada" if cfg["clave"] else "NO configurada"))
+        ok, mensaje = ia.probar(cfg)
+        (bien if ok else mal)(mensaje)
+        return 0 if ok else 1
     if "--listar" in argumentos:
         titulo("Catálogo de reparaciones")
         for categoria, lista in sorted(reparaciones.por_categoria().items()):
