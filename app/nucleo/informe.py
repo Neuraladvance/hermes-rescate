@@ -60,9 +60,12 @@ h3{font-size:14px;margin:20px 0 8px;color:#475467;text-transform:uppercase;lette
 .tarjeta .num{font-size:26px;font-weight:700;line-height:1.1}
 .tarjeta .eti{font-size:12px;color:#667085;text-transform:uppercase;letter-spacing:.05em}
 table{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0 4px}
-th,td{text-align:left;padding:7px 10px;border-bottom:1px solid #eaecf0;vertical-align:top}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid #eaecf0;vertical-align:top;
+ overflow-wrap:anywhere;word-break:break-word}
 th{color:#475467;font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;background:#fcfcfd}
 tr:last-child td{border-bottom:none}
+table.fija{table-layout:fixed}
+table.fija col{min-width:0}
 .hall{border-left:4px solid #ccc;background:#fafafa;border-radius:0 8px 8px 0;padding:11px 14px;margin:10px 0}
 .hall .t{font-weight:600;margin-bottom:3px}
 .hall .d{color:#475467;font-size:14px}
@@ -127,9 +130,12 @@ def _hallazgos_html(hallazgos):
     return "".join(partes)
 
 
-def _tabla(filas, cabeceras):
+def _tabla(filas, cabeceras, anchos=None):
     cab = "".join("<th>%s</th>" % _e(c) for c in cabeceras)
     cuerpo = "".join("<tr>%s</tr>" % "".join("<td>%s</td>" % c for c in fila) for fila in filas)
+    if anchos and len(anchos) == len(cabeceras):
+        grupo = "<colgroup>%s</colgroup>" % "".join('<col style="width:%s">' % a for a in anchos)
+        return '<table class="fija">%s<tr>%s</tr>%s</table>' % (grupo, cab, cuerpo)
     return "<table><tr>%s</tr>%s</table>" % (cab, cuerpo)
 
 
@@ -270,7 +276,8 @@ def _red(datos):
     for a in red.get("adaptadores") or []:
         filas.append([_e(a.get("descripcion")), _e(a.get("ip")), _e(a.get("puerta")), _e(a.get("dns")),
                       _e(a.get("mac"))])
-    tabla = _tabla(filas, ["Adaptador", "IP", "Puerta", "DNS", "MAC"]) if filas else ""
+    tabla = _tabla(filas, ["Adaptador", "IP", "Puerta", "DNS", "MAC"],
+                   anchos=("26%", "24%", "14%", "22%", "14%")) if filas else ""
     estados = " · ".join("%s: %s" % (k, "sí" if v else "NO") for k, v in conn.items())
     return tabla + ("<p class=sub>Conexiones: %s</p>" % _e(estados) if estados else "")
 
@@ -286,8 +293,9 @@ def _estabilidad(datos):
     if eventos:
         partes.append("<h3>Errores más repetidos (7 días)</h3>%s" % _tabla(
             [[_e(e.get("origen")), _e(e.get("id")), _e(e.get("veces")), _fecha_legible(e.get("ultimo")),
-              _e((e.get("muestra") or "")[:70])] for e in eventos],
-            ["Origen", "Evento", "Veces", "Último", "Mensaje"]))
+              _e((e.get("muestra") or "")[:90])] for e in eventos],
+            ["Origen", "Evento", "Veces", "Último", "Mensaje"],
+            anchos=("26%", "9%", "9%", "19%", "37%")))
     devs = datos.get("dispositivos_error") or []
     if devs:
         partes.append("<h3>Dispositivos con error</h3>%s" % _tabla(
@@ -314,17 +322,19 @@ def _anexo(datos):
     if progs.get("grandes"):
         partes.append("<h3>Programas que más ocupan</h3>%s" % _tabla(
             [[_e(p.get("nombre")), _e(p.get("version")), "%.0f MB" % float(p.get("mb") or 0)]
-             for p in progs["grandes"]], ["Programa", "Versión", "Tamaño"]))
+             for p in progs["grandes"]], ["Programa", "Versión", "Tamaño"],
+            anchos=("55%", "20%", "25%")))
     arranque = datos.get("arranque") or []
     if arranque:
         partes.append("<h3>Programas al arrancar (%d)</h3>%s" % (len(arranque), _tabla(
-            [[_e(a.get("nombre")), _e((a.get("comando") or "")[:80]), _e(a.get("ubicacion"))]
-             for a in arranque], ["Nombre", "Comando", "Ubicación"])))
+            [[_e(a.get("nombre")), _e((a.get("comando") or "")[:120]), _e(a.get("ubicacion"))]
+             for a in arranque], ["Nombre", "Comando", "Ubicación"],
+            anchos=("20%", "52%", "28%"))))
     basura = datos.get("basura") or []
     if basura:
         partes.append("<h3>Espacio recuperable</h3>%s" % _tabla(
             [[_e(b.get("nombre")), _e(b.get("ruta")), _e(b.get("texto"))] for b in basura],
-            ["Categoría", "Ruta", "Tamaño"]))
+            ["Categoría", "Ruta", "Tamaño"], anchos=("26%", "46%", "28%")))
     errores = datos.get("errores") or []
     if errores:
         partes.append("<h3>Incidencias de la propia auditoría</h3><pre>%s</pre>"
