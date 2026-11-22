@@ -1,17 +1,16 @@
 {
   "ia": {
     "endpoint": "https://openrouter.ai/api/v1",
-    "modelo": "nombre-del-modelo",
+    "modelo": "baidu/ernie-5.5-flash-preview:free",
     "clave": "tu-clave",
     "temperatura": 0.2,
     "max_tokens": 1200,
     "aviso_privacidad": true,
     "alternativas": [
       "openrouter/free",
-      "google/gemma-4-26b-a4b-it:free",
-      "nvidia/nemotron-3-super-vl:free"
+      "google/gemma-4-31b-it:free"
     ],
     "max_modelos": 3
   },
-  "nota": "Opcional. Renombra este fichero a config.json y rellena endpoint, modelo y clave de cualquier API compatible con OpenAI. Sin esto el programa funciona igual: la auditoría y las reparaciones no usan IA. CADENA DE MODELOS: se usa «modelo» y, si falla (tope diario, modelo retirado, sin respuesta), salta a «alternativas» en orden hasta «max_modelos» (3). Si fallan todos, el programa lo dice modelo por modelo en vez de quedarse callado. «openrouter/free» elige solo entre los gratuitos disponibles en ese momento. La clave se guarda en el USB: si lo pierdes, revócala."
+  "nota": "Opcional. Renombra este fichero a config.json y rellena endpoint, modelo y clave de cualquier API compatible con OpenAI. Sin esto el programa funciona igual: la auditoría y las reparaciones no usan IA. CADENA DE MODELOS: se usa «modelo» y, si falla (429 de tope, modelo retirado, sin respuesta), salta a «alternativas» en orden hasta «max_modelos» (3). Los :free dan 429 con frecuencia; por eso hay cadena. CADENA MEDIDA el 22-nov-2026: baidu/ernie responde, openrouter/free responde con coste 0 y gemma-4-31b es el de más calidad cuando no está limitado. CLAVE CIFRADA (recomendado en un USB): guarda la clave con «Rescate.bat --ia-clave» y elige cifrarla con contraseña; entonces vive en config/ia.dat (ChaCha20 + scrypt + HMAC) y este fichero se queda sin clave. Si pierdes el USB no hay nada legible; si olvidas la contraseña, borra config/ia.dat y crea otra clave."
 }

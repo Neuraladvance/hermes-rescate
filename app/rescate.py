@@ -22,6 +22,7 @@ import json
 import os
 import socket
 import sys
+import webbrowser
 
 RAIZ_APP = os.path.dirname(os.path.abspath(__file__))
 if RAIZ_APP not in sys.path:
@@ -356,21 +357,117 @@ def menu_catalogo(datos=None, hallazgos=None, resumen=None):
     return ejecuciones
 
 
+def _desbloquear_ia():
+    """Si la clave está cifrada en el USB, pide la contraseña. Devuelve la config o None."""
+    from nucleo import ia
+    cfg = ia.config()
+    if not ia.hay_clave_cifrada() or ia.desbloqueada():
+        return cfg
+    titulo("Clave de IA protegida")
+    print("  La clave de este USB está cifrada. Escribe la contraseña para usarla.")
+    for intento in (1, 2, 3):
+        try:
+            password = getpass.getpass("  contraseña del USB (%d/3): " % intento)
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return None
+        try:
+            meta = ia.desbloquear(password)
+        except RuntimeError as exc:
+            mal(str(exc))
+            continue
+        extra = ""
+        if meta.get("caduca"):
+            extra = " · caduca el %s" % meta["caduca"][:10]
+        bien("Clave descifrada en memoria%s." % extra)
+        return ia.config()
+    mal("No se pudo descifrar. El resto del programa funciona igual sin IA.")
+    return None
+
+
+def _cifrar_clave_pedida(clave):
+    """Pide contraseña y guarda la clave cifrada en config/ia.dat."""
+    from nucleo import ia
+    for _ in range(3):
+        try:
+            una = getpass.getpass("  contraseña para cifrar (mínimo 8 caracteres): ")
+            otra = getpass.getpass("  repite la contraseña: ")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return False
+        if len(una) < 8:
+            ojo("Demasiado corta: usa al menos 8 caracteres.")
+            continue
+        if una != otra:
+            mal("No coinciden.")
+            continue
+        ruta = ia.cifrar_clave(clave, una)
+        ia.guardar_config(clave="")
+        bien("Clave cifrada en %s" % ruta)
+        ojo("Sin esa contraseña la clave NO se puede recuperar. Apúntala en un sitio seguro.")
+        return True
+    mal("No se cifró: la clave sigue en config/config.json en claro.")
+    return False
+
+
+def _guia_clave(cfg=None):
+    """Explica cómo conseguir una clave gratuita y la guarda si el usuario quiere."""
+    from nucleo import ia
+    titulo("Activar el chat (gratis y opcional)")
+    print("  Todo lo demás del programa funciona sin esto. El chat usa los modelos")
+    print("  gratuitos de OpenRouter: cuestan 0 y no hay que pagar nada.")
+    print()
+    print("  PASOS (2 minutos, sin tarjeta)")
+    print("    1. Abre https://openrouter.ai/keys")
+    print("    2. Entra o crea la cuenta (con Google vale).")
+    print("    3. Pulsa «Create key» y ponle un nombre, p. ej. «USB rescate».")
+    print("    4. Copia el valor: empieza por sk-or-v1- y solo se muestra una vez.")
+    print()
+    print("  La clave es personal: no la comparta ni la publique.")
+    print()
+    if preguntar("¿Abrir la página de OpenRouter en el navegador?", "s"):
+        try:
+            webbrowser.open("https://openrouter.ai/keys")
+            bien("Página abierta.")
+        except Exception as exc:
+            ojo("No se pudo abrir el navegador: %s" % exc)
+    print()
+    if not preguntar("¿Pegar aquí la clave ahora? (no se verá en pantalla)", "s"):
+        print("  Cuando la tengas: Rescate.bat --ia-clave")
+        return
+    try:
+        clave = getpass.getpass("  clave: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return
+    if not clave:
+        mal("No has pegado nada.")
+        return
+    if not clave.startswith("sk-"):
+        ojo("No empieza por «sk-»: la guardo igual, pero revisa que no falte un trozo.")
+    endpoint = (cfg or {}).get("endpoint") or "https://openrouter.ai/api/v1"
+    ia.guardar_config(endpoint=endpoint, clave=clave)
+    bien("Guardada en config/config.json")
+    if preguntar("¿Cifrarla con contraseña? (recomendado si el USB puede perderse)", "s"):
+        if _cifrar_clave_pedida(clave):
+            print()
+            cfg = _desbloquear_ia() or ia.config()
+    print()
+    cfg = ia.config()
+    ok, mensaje = ia.probar(cfg)
+    print(mensaje)
+    (bien if ok else ojo)("Chat listo." if ok else
+                         "Se ha guardado, aunque ahora mismo no responde ningún modelo.")
+
+
 def menu_chat(datos, hallazgos, resumen):
     from nucleo import ia
     titulo("Hablar con la IA")
-    cfg = ia.config()
-    if not ia.disponible():
-        mal("No hay IA configurada (y no hace falta para nada de lo anterior).")
-        print("  Para activarla, en config/config.json rellena:")
-        print('    "ia": { "endpoint": "https://.../v1", "modelo": "...", "clave": "..." }')
-        if preguntar("¿Configurarla ahora?", "n"):
-            endpoint = input("  endpoint (p.ej. https://openrouter.ai/api/v1): ").strip()
-            modelo = input("  modelo: ").strip()
-            clave = input("  clave: ").strip()
-            if endpoint and modelo and clave:
-                ia.guardar_config(endpoint=endpoint, modelo=modelo, clave=clave)
-                bien("Guardada en config/config.json")
+    cfg = _desbloquear_ia()
+    if cfg is None or not ia.disponible():
+        mal("La IA no está activa (y no hace falta para nada de lo anterior).")
+        print()
+        _guia_clave(cfg)
         return
     agente = ia.Agente(datos, hallazgos, resumen, cfg)
     print("  Cadena de modelos: %s" % " → ".join(ia.modelos(cfg)))
@@ -682,12 +779,41 @@ def main():
     if "--estado" in argumentos:
         menu_estado()
         return 0
+    if "--ia-clave" in argumentos:
+        from nucleo import ia
+        titulo("Guardar la clave de IA")
+        print("  Pega la clave de OpenRouter (empieza por sk-or-v1-). No se verá al escribirla.")
+        try:
+            clave = getpass.getpass("  clave: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 1
+        if not clave:
+            mal("No has pegado nada.")
+            return 1
+        ia.guardar_config(clave=clave)
+        bien("Guardada en config/config.json")
+        if preguntar("¿Cifrarla con contraseña (recomendado en un USB)?", "s"):
+            _cifrar_clave_pedida(clave)
+        return 0
+    if "--ia-cifrar" in argumentos:
+        from nucleo import ia
+        titulo("Cifrar la clave de IA del USB")
+        cfg = ia.config()
+        if ia.hay_clave_cifrada():
+            ojo("Ya existe config/ia.dat: se sobrescribirá con la clave y contraseña nuevas.")
+        if not cfg.get("clave"):
+            mal("No hay ninguna clave en claro en config/config.json para cifrar.")
+            print("  Guarda primero la clave con: Rescate.bat --ia-clave")
+            return 1
+        return 0 if _cifrar_clave_pedida(cfg["clave"]) else 1
     if "--ia-probar" in argumentos:
         from nucleo import ia
         titulo("Prueba de la cadena de modelos")
-        cfg = ia.config()
+        cfg = _desbloquear_ia() or ia.config()
         print("  endpoint: %s" % (cfg["endpoint"] or "(vacío)"))
-        print("  clave   : %s" % ("configurada" if cfg["clave"] else "NO configurada"))
+        print("  clave   : %s" % ("cifrada en el USB (descifrada)" if ia.desbloqueada()
+                                  else ("en claro en config.json" if cfg["clave"] else "NO configurada")))
         print("  cadena  : %s" % (" → ".join(ia.modelos(cfg)) or "(ningún modelo)"))
         print()
         ok, mensaje = ia.probar(cfg)

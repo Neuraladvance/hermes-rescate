@@ -8,6 +8,9 @@ logs/
 # Configuración real del técnico (redes WiFi y claves de IA)
 config/wifi.json
 config/config.json
+# Clave de IA cifrada con contraseña: nunca se publica
+config/ia.dat
+config/*.dat
 
 # Copias de seguridad y restos locales
 BACKUP-*/

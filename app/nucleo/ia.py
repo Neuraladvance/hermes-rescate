@@ -13,7 +13,73 @@ import re
 import urllib.error
 import urllib.request
 
-from . import reparaciones, util
+from . import reparaciones, secreto, util
+
+# Clave cifrada con contraseña (opcional). Se descifra en memoria y nunca se escribe
+# en claro: sirve para llevar la clave en el USB sin que se pueda leer.
+RUTA_CIFRADA = util.ruta("config", "ia.dat")
+_CLAVE_MEMORIA = [None]
+
+
+def config_cifrada():
+    "Devuelve el sobre cifrado (JSON) si existe, o None."
+    try:
+        with open(RUTA_CIFRADA, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return None
+
+
+def hay_clave_cifrada():
+    return config_cifrada() is not None
+
+
+def desbloqueada():
+    return _CLAVE_MEMORIA[0] is not None
+
+
+def desbloquear(password):
+    """Descifra config/ia.dat en memoria. Devuelve los metadatos (sin la clave)."""
+    sobre = config_cifrada()
+    if not sobre:
+        raise RuntimeError("No hay clave cifrada (config/ia.dat) en este USB.")
+    try:
+        claro = secreto.descifrar(sobre, password)
+    except ValueError as exc:
+        raise RuntimeError(str(exc))
+    try:
+        datos = json.loads(claro)
+    except ValueError:
+        # formato antiguo: el fichero descifrado era la clave en crudo
+        datos = {"clave": claro.strip()}
+    clave = (datos.get("clave") or "").strip()
+    if not clave:
+        raise RuntimeError("El fichero cifrado no contiene ninguna clave.")
+    _CLAVE_MEMORIA[0] = clave
+    return {k: v for k, v in datos.items() if k != "clave"}
+
+
+def cifrar_clave(clave, password, caduca=None, nombre="HERMES-RESCATE-USB"):
+    """Escribe config/ia.dat cifrado con la contraseña indicada."""
+    contenido = json.dumps({
+        "clave": clave,
+        "nombre": nombre,
+        "caduca": caduca or "",
+        "creado": util.ahora_iso() if hasattr(util, "ahora_iso") else "",
+    }, ensure_ascii=False)
+    sobre = secreto.cifrar(contenido, password)
+    os.makedirs(os.path.dirname(RUTA_CIFRADA), exist_ok=True)
+    with open(RUTA_CIFRADA, "w", encoding="utf-8") as f:
+        f.write(sobre)
+    _CLAVE_MEMORIA[0] = clave
+    return RUTA_CIFRADA
+
+
+def clave_efectiva(cfg=None):
+    if _CLAVE_MEMORIA[0]:
+        return _CLAVE_MEMORIA[0]
+    return ((cfg or config()).get("clave") or "").strip()
+
 
 DEFECTO = {
     "endpoint": "",
@@ -55,6 +121,7 @@ def config():
     datos["endpoint"] = os.environ.get("RESCATE_IA_ENDPOINT", datos["endpoint"]).rstrip("/")
     datos["modelo"] = os.environ.get("RESCATE_IA_MODELO", datos["modelo"])
     datos["clave"] = os.environ.get("RESCATE_IA_CLAVE", datos["clave"])
+    datos["cifrada"] = bool(not datos["clave"] and hay_clave_cifrada())
     return datos
 
 
@@ -73,7 +140,7 @@ def guardar_config(**cambios):
 
 def disponible():
     cfg = config()
-    return bool(cfg["endpoint"] and cfg["clave"] and modelos(cfg))
+    return bool(cfg["endpoint"] and clave_efectiva(cfg) and modelos(cfg))
 
 
 # ------------------------------------------------------------------ seudonimizacion
@@ -225,7 +292,7 @@ def _peticion_modelo(cfg, mensajes, modelo, timeout):
     peticion = urllib.request.Request(
         cfg["endpoint"] + "/chat/completions", data=cuerpo,
         headers={"Content-Type": "application/json",
-                 "Authorization": "Bearer " + cfg["clave"]})
+                 "Authorization": "Bearer " + clave_efectiva(cfg)})
     try:
         with urllib.request.urlopen(peticion, timeout=timeout) as respuesta:
             datos = json.loads(respuesta.read().decode("utf-8", "replace"))
@@ -336,7 +403,10 @@ def probar(cfg=None):
     cfg = cfg or config()
     if not cfg.get("endpoint"):
         return False, "Falta «endpoint» en config/config.json (bloque «ia»)."
-    if not cfg.get("clave"):
+    if not clave_efectiva(cfg):
+        if hay_clave_cifrada():
+            return False, ("Hay una clave cifrada en config/ia.dat, pero no se ha "
+                           "desbloqueado: hace falta la contraseña del USB.")
         return False, ("Falta la «clave» en config/config.json: pégala desde "
                        "openrouter.ai → Keys. Sin clave no se envía nada.")
     cadena = modelos(cfg)

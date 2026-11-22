@@ -109,13 +109,25 @@ Este repositorio **no incluye ninguna clave, y no puede incluirla**:
 Si quieres el chat, crea la tuya —gratis, sin tarjeta, un minuto—:
 
 1. https://openrouter.ai/keys → **Create key**
-2. Pégala en `config/config.json` (o desde el menú, opción 7)
+2. Guárdala con `Rescate.bat --ia-clave` (no se ve al escribirla) o pégala en `config/config.json`
 3. Comprueba la cadena de modelos: `Rescate.bat --ia-probar`
+
+### Guardarla cifrada (recomendado en un USB)
+
+Un USB se pierde. Si eliges cifrar la clave al guardarla, el programa escribe
+`config/ia.dat` con **ChaCha20 + HMAC-SHA256** y clave derivada por **scrypt** (solo
+biblioteca estándar, sin dependencias) y deja `config/config.json` sin la clave. Sin la
+contraseña ese fichero no se puede abrir: se pide al usar el chat y se descifra solo en
+memoria. `config/ia.dat` está en `.gitignore`, así que nunca se publica.
+
+- `Rescate.bat --ia-clave` — guardar (y opcionalmente cifrar) una clave
+- `Rescate.bat --ia-cifrar` — cifrar la que ya está en claro
+- Si olvidas la contraseña: borra `config/ia.dat` y crea otra clave. No hay recuperación.
 
 **Sin clave, todo lo demás funciona igual**: la auditoría, el diagnóstico, las
 reparaciones y el informe no usan IA. Si compartes tu USB con otra persona, borra
-antes `config/config.json`. El repositorio ya lo ignora (`.gitignore`), así que nunca
-se publica.
+antes `config/config.json` y `config/ia.dat`.
+
 
 
 ## Antes de usarlo: DISCLAIMER obligatorio
