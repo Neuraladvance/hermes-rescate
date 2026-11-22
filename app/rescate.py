@@ -492,6 +492,13 @@ def _guia_clave(cfg=None):
     """Explica cómo conseguir una clave gratuita y la guarda si el usuario quiere."""
     from nucleo import ia
     titulo("Activar el chat (gratis y opcional)")
+    if ia.hay_clave_cifrada() or ia.clave_efectiva(cfg):
+        # Ya hay clave: este asistente sobra y confunde (lleva a pegar otra encima).
+        bien("Este USB YA tiene una clave de IA guardada.")
+        print("  Si está cifrada, solo hace falta la contraseña cuando abras el chat.")
+        print("  Para usar otra clave distinta:  Rescate.bat --ia-clave")
+        print("  Para cambiar la contraseña:     Rescate.bat --ia-contrasena")
+        return
     print("  Todo lo demás del programa funciona sin esto. El chat usa los modelos")
     print("  gratuitos de OpenRouter: cuestan 0 y no hay que pagar nada.")
     print()
@@ -519,7 +526,8 @@ def _guia_clave(cfg=None):
         print()
         return
     if not clave:
-        mal("No has pegado nada.")
+        ojo("No has pegado nada: no se ha cambiado nada.")
+        print("  Cuando la tengas: Rescate.bat --ia-clave")
         return
     if not clave.startswith("sk-"):
         ojo("No empieza por «sk-»: la guardo igual, pero revisa que no falte un trozo.")
@@ -542,8 +550,16 @@ def menu_chat(datos, hallazgos, resumen):
     from nucleo import ia
     titulo("Hablar con la IA")
     cfg = _desbloquear_ia()
-    if cfg is None or not ia.disponible():
-        mal("La IA no está activa (y no hace falta para nada de lo anterior).")
+    if cfg is None:
+        # En blanco = "sigo sin IA". Solo se ofrece crear una clave si de verdad no hay.
+        if ia.hay_clave_cifrada():
+            ojo("Sigues sin IA, como pediste. Si quieres el chat, repite la opción 7 y "
+                "escribe la contraseña del USB.")
+        else:
+            _guia_clave(cfg)
+        return
+    if not ia.disponible():
+        mal("La IA no está configurada (y no hace falta para nada de lo anterior).")
         print()
         _guia_clave(cfg)
         return
