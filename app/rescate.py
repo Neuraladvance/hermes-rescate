@@ -175,7 +175,10 @@ def aplicar_recomendadas(datos, hallazgos, resumen, auto=False):
         return []
 
     if any(reparaciones.obtener(i)["nivel"] == 2 for i in seleccion) and es_admin():
-        if (not auto) and preguntar("¿Crear un punto de restauración antes? (recomendado)", "s"):
+        # Si ya se ha elegido crear el punto como una acción más, no se pregunta otra vez.
+        ya_incluido = "punto_restauracion" in seleccion
+        if (not auto) and not ya_incluido and preguntar(
+                "¿Crear un punto de restauración antes? (recomendado)", "s"):
             paso("Creando punto de restauración...")
             registro = reparaciones.ejecutar("punto_restauracion", aviso=paso)
             ejecuciones.append(registro)

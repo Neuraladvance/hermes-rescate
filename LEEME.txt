@@ -18,6 +18,17 @@ Para ejecuciones desatendidas (scripts) se puede responder de antemano:
 Para volver a leer el aviso cuando quieras:
     Rescate.bat --aviso
 
+SIMULACIÓN COMPLETA (buscar fallos sin tocar el equipo)
+------------------------------------------------------
+    runtime\python\python.exe tests\simulacion.py
+
+Recorre las 9 opciones del menú y las 10 órdenes de la línea de comandos con dobles
+de prueba: no ejecuta ninguna reparación, instalación ni actualización real (solo la
+auditoría y la consulta a Windows Update, que son de lectura). Comprueba además que
+todos los módulos compilan, que los mensajes tienen el formato correcto, que las 41
+reparaciones del catálogo están completas, que las reglas de diagnóstico aguantan
+datos raros (46 escenarios) y que los informes se generan. Añade -v para ver trazas.
+
 CÓMO SE USA
 -----------
 1. Copia esta carpeta completa a la raíz de un USB (mejor USB 3.0).

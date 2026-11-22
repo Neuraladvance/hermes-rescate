@@ -376,9 +376,10 @@ def _recomendadas_html(hallazgos):
 
 def construir_html(datos, hallazgos, resumen, ejecuciones=None):
     so = datos.get("so") or {}
-    veredicto = resumen["veredicto"]
+    resumen = resumen or {}
+    veredicto = resumen.get("veredicto") or "ok"
     color = COLOR.get(veredicto if veredicto != "ok" else "ok", "#067647")
-    cuenta = resumen["cuenta"]
+    cuenta = resumen.get("cuenta") or {}
     tarjetas = (
         '<div class="tarjetas">'
         '<div class="tarjeta" style="border-color:#fecdca"><div class="num malo">%d</div>'
@@ -432,7 +433,8 @@ autorización de su responsable, y haz copia de seguridad antes de reparar.</div
         _e(_equipo_nombre(so)),
         _e(datos.get("equipo")),
         _e(_fecha_legible(datos.get("generado"))),
-        color, FONDO.get(veredicto if veredicto != "ok" else "ok", "#ecfdf3"), _e(resumen["titulo"]),
+        color, FONDO.get(veredicto if veredicto != "ok" else "ok", "#ecfdf3"),
+        _e(resumen.get("titulo") or resumen.get("veredicto") or "sin datos"),
         tarjetas,
         _e(_parrafo_resumen(hallazgos, resumen)),
         _ejecuciones(ejecuciones or []),
@@ -484,11 +486,12 @@ def construir_markdown(datos, hallazgos, resumen, ejecuciones=None):
         "**%s %s** · %s · %s" % (so.get("fabricante") or "", so.get("modelo") or "", so.get("nombre") or "",
                                  _fecha_legible(datos.get("generado"))),
         "",
-        "## Veredicto: %s" % resumen["titulo"],
+        "## Veredicto: %s" % (resumen.get("titulo") or resumen.get("veredicto") or "sin datos"),
         "",
         "| Críticos | A revisar | Informativos |", "|---:|---:|---:|",
-        "| %d | %d | %d |" % (resumen["cuenta"].get("critico", 0), resumen["cuenta"].get("aviso", 0),
-                              resumen["cuenta"].get("info", 0)),
+        "| %d | %d | %d |" % ((resumen.get("cuenta") or {}).get("critico", 0),
+                              (resumen.get("cuenta") or {}).get("aviso", 0),
+                              (resumen.get("cuenta") or {}).get("info", 0)),
         "",
         "## Hallazgos",
         "",

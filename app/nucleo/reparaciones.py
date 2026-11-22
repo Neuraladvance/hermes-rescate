@@ -701,7 +701,7 @@ def _r():
          "Activa los puntos de restauración (usa hasta un 10% del disco).",
          "Antes de instalar software grande o drivers.",
          _activar_restauracion, admin=True, categoria="Sistema")
-    _reg("punto_restauracion", "Crear punto de restauración", 1,
+    _reg("punto_restauracion", "Crear punto de restauración", 2,
          "Guarda el estado actual para poder volver atrás.",
          "Siempre antes de otras reparaciones. Es la red de seguridad.",
          _punto_restauracion, admin=True, categoria="Sistema")
