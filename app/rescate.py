@@ -670,25 +670,25 @@ def puerta_disclaimer(automatico=False):
         print("  Texto completo: %s" % ruta)
     print()
     print("  Escribe %s para continuar o %s para salir."
-          % (C.color("ACEPTO", C.VERDE), C.color("REHUSO", C.ROJO)))
+          % (C.color("S", C.VERDE), C.color("N", C.ROJO)))
     while True:
         try:
             respuesta = input(C.color("  › ", C.NEGRITA)).strip().upper()
         except (EOFError, KeyboardInterrupt):
             print()
-            respuesta = "REHUSO"
-        if respuesta in ("ACEPTO", "A", "SI", "SÍ", "S"):
+            respuesta = "N"
+        if respuesta == "S":
             _registrar_aceptacion("ACEPTO")
             bien("Aceptado. Registrado en logs/aceptaciones.jsonl")
             print()
             return True
-        if respuesta in ("REHUSO", "R", "NO", "N", ""):
+        if respuesta in ("N", ""):
             _registrar_aceptacion("REHUSO")
             mal("Rehusado: el programa no se usará.")
             print("  Decisión registrada en logs/aceptaciones.jsonl")
             print()
             return False
-        print("  Respuesta no válida: escribe ACEPTO o REHUSO.")
+        print("  Respuesta no válida: escribe S (sí) o N (no).")
 
 
 def menu_principal():

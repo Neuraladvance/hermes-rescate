@@ -133,7 +133,7 @@ antes `config/config.json` y `config/ia.dat`.
 ## Antes de usarlo: DISCLAIMER obligatorio
 
 En **cada ejecución**, el programa muestra el aviso legal y **no deja continuar sin una
-respuesta explícita**: `ACEPTO` o `REHUSO`. Si se rehúsa, se cierra sin ejecutar nada. No
+respuesta explícita**: `S` (sí) o `N` (no). Si se rehúsa, se cierra sin ejecutar nada. No
 se recuerda la aceptación anterior a propósito: el aviso es un recordatorio de que el
 programa modifica el sistema y de que el riesgo es de quien lo usa. La decisión se
 registra en `logs/aceptaciones.jsonl` (fecha, equipo, usuario, versión y decisión). El

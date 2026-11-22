@@ -5,11 +5,11 @@
 
 ANTES DE USARLO: DISCLAIMER
 ---------------------------
-En CADA ejecución, el programa muestra el aviso legal y OBLIGA a responder ACEPTO o
-REHUSO antes de hacer nada. No se recuerda la aceptación anterior a propósito: es un
+En CADA ejecución, el programa muestra el aviso legal y OBLIGA a responder S (sí) o
+N (no) antes de hacer nada. No se recuerda la aceptación anterior a propósito: es un
 recordatorio de que el programa modifica el sistema y de que el riesgo es de quien lo usa.
-  · ACEPTO  → continúa y lo registra en logs/aceptaciones.jsonl
-  · REHUSO  → cierra el programa sin ejecutar nada
+  · S  → continúa y lo registra en logs/aceptaciones.jsonl
+  · N  → cierra el programa sin ejecutar nada
 El aviso queda también en el menú, opción 9 «DISCLAIMER · Aviso legal y créditos».
 EL USO DEL PROGRAMA ES BAJO LA RESPONSABILIDAD ÚNICA Y EXCLUSIVA DE QUIEN LO EJECUTA.
 El registro guarda fecha, equipo, usuario, versión y decisión: queda constancia de cada uso.

@@ -4,7 +4,7 @@
 
 **EL USO DE ESTE PROGRAMA ES BAJO LA RESPONSABILIDAD ÚNICA Y EXCLUSIVA DE QUIEN LO
 EJECUTA.** En **cada ejecución**, el programa muestra este aviso y exige una respuesta
-explícita: **ACEPTO** o **REHUSO**. Si se rehúsa, el programa se cierra y no ejecuta
+explícita: **S** (sí) o **N** (no). Si se rehúsa, el programa se cierra y no ejecuta
 ninguna acción. La aceptación no se recuerda de una vez para siempre a propósito: el aviso
 es un recordatorio de que el programa modifica la configuración del sistema y de que el
 riesgo lo asume quien lo ejecuta. Cada decisión queda registrada en
