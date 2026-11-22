@@ -745,20 +745,123 @@ def _ejecutar_instalacion(orden, paquete, pista=None):
     if not instalador.winget_disponible():
         mal("winget no está disponible en este equipo (hace falta Windows 11 con App Installer).")
         return
-    verbo = "Instalar" if orden == "INSTALAR" else "Desinstalar"
+    if orden == "DESINSTALAR":
+        from nucleo import desinstalador
+        paso("Buscando «%s» entre los programas instalados..." % paquete)
+        candidatos = desinstalador.buscar_programa(paquete)
+        if not candidatos:
+            mal("No encuentro «%s» entre los programas instalados." % paquete)
+            return
+        programa = candidatos[0]
+        if len(candidatos) > 1:
+            print(C.color("  Hay varios programas parecidos:", C.GRIS))
+            for i, cada in enumerate(candidatos[:9], 1):
+                print(C.color("   %d) %-46s %s" % (i, (cada.get("nombre") or "")[:46],
+                                                  cada.get("version") or ""), C.GRIS))
+            try:
+                elegido = input(C.color("  número (Enter para cancelar): ", C.CIAN)).strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return
+            if not elegido.isdigit() or not (1 <= int(elegido) <= len(candidatos[:9])):
+                print("  Cancelado: no se toca nada.")
+                return
+            programa = candidatos[int(elegido) - 1]
+        bien("Programa: %s %s" % (programa.get("nombre"), programa.get("version") or ""))
+        print("  Se desinstalará y después se buscan los restos (carpetas, registro, "
+              "servicios y tareas). Lo compartido no se toca.")
+        if not preguntar("¿Desinstalar «%s» y limpiar restos?" % programa.get("nombre"), "n"):
+            print("  Cancelado: no se toca nada.")
+            return
+        _desinstalar_profundo(programa)
+        return
+
+    verbo = "Instalar"
     print()
     paso("%s con winget: %s" % (verbo, paquete))
     if not preguntar("¿%s «%s»? (puede tardar varios minutos)" % (verbo.lower(), paquete), "n"):
         print("  Cancelado: no se toca nada.")
         return
     aviso = lambda m: print("      " + C.color(m, C.GRIS), flush=True)
-    if orden == "INSTALAR":
-        ok, salida = instalador.instalar(paquete, aviso=aviso)
-    else:
-        ok, salida = instalador.desinstalar(paquete, aviso=aviso)
+    ok, salida = instalador.instalar(paquete, aviso=aviso)
     for linea in (salida or "").splitlines()[-10:]:
         print(C.color("    " + linea[:150], C.GRIS))
     (bien if ok else mal)("%s %s: %s" % (verbo.lower(), paquete, "hecho" if ok else "no se completó"))
+
+
+def _desinstalar_profundo(programa, identificador=None):
+    """Desinstala y después busca los restos, como Revo. Nada se borra sin permiso."""
+    from nucleo import desinstalador, instalador
+    nombre = programa.get("nombre") or identificador
+    print()
+    paso("Foto del sistema antes de desinstalar (programas, carpetas, registro)...")
+    try:
+        antes = desinstalador.instantanea("antes")
+    except RuntimeError as exc:
+        mal(str(exc))
+        return False
+    bien("Anotados %d programas y %d carpetas." % (len(antes.get("programas") or []),
+                                                   len(antes.get("carpetas") or [])))
+    paso("Desinstalando «%s» con su propio desinstalador..." % nombre)
+    aviso = lambda m: print("      " + C.color(m, C.GRIS), flush=True)
+    if identificador:
+        ok, salida = instalador.desinstalar(identificador, aviso=aviso)
+    else:
+        orden = programa.get("desinstalar") or ""
+        if not orden:
+            mal("Ese programa no tiene orden de desinstalación; no se puede quitar solo.")
+            return False
+        rc, salida, err = util.ps(orden, timeout=1800)
+        ok = rc == 0
+        salida = ((salida or "") + " " + (err or "")).strip()
+    (bien if ok else mal)("Desinstalador: %s" % ("terminado" if ok else "no terminó bien"))
+    paso("Comprobando qué ha quedado...")
+    try:
+        despues = desinstalador.instantanea("despues")
+    except RuntimeError as exc:
+        mal(str(exc))
+        return ok
+    quedan = desinstalador.restos(programa, antes, despues)
+    if not quedan:
+        bien("Sin restos: el desinstalador lo ha dejado limpio.")
+        return ok
+    desinstalador.tamanos(quedan)
+    titulo("Restos encontrados (%d)" % len(quedan))
+    borrables, compartidos = [], []
+    for elemento in quedan:
+        marca = {"carpeta": "[carpeta]", "registro": "[registro]", "servicio": "[servicio]",
+                 "tarea": "[tarea]"}.get(elemento["tipo"], "[?]")
+        tamano = ""
+        if elemento.get("mb"):
+            tamano = " %.1f MB" % elemento["mb"]
+        if elemento.get("intocable"):
+            nota = C.color(" (compartido del sistema: no se toca)", C.AMARILLO)
+            compartidos.append(elemento)
+        elif elemento.get("compartida"):
+            nota = C.color(" (lo usan: %s — no se toca)" % ", ".join(elemento["compartida"][:3]),
+                           C.AMARILLO)
+            compartidos.append(elemento)
+        else:
+            nota = ""
+            borrables.append(elemento)
+        print("  %-11s %-44s%s%s" % (marca, (elemento.get("nombre") or "")[:44], tamano, nota))
+    print()
+    if compartidos:
+        ojo("%d restos son compartidos o del sistema: se dejan como están." % len(compartidos))
+    if not borrables:
+        print("  No hay nada que se pueda borrar sin riesgo.")
+        return ok
+    if not preguntar("¿Mover los %d restos propios a cuarentena (recuperables)?" % len(borrables),
+                     "n"):
+        print("  No se toca nada. Los restos siguen donde estaban.")
+        return ok
+    hechos, fallos = desinstalador.cuarentena(borrables, aviso=aviso)
+    for hecho in hechos:
+        bien(hecho)
+    for fallo in fallos:
+        mal(fallo)
+    ojo("Lo movido está en logs\cuarentena: se puede recuperar a mano.")
+    return ok
 
 
 def _ejecutar_consultas(comandos):

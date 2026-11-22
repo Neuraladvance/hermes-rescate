@@ -25,6 +25,7 @@ pedir nada. Los modelos son los gratuitos: cuestan 0 y no hace falta tarjeta.
 
     Rescate.bat --ia-clave       →  pegar una clave (la primera vez)
     Rescate.bat --ia-probar      →  comprobar que responde
+    «desinstalar <programa>»      →  quita el programa Y limpia sus restos
 
 Protegerla es OPCIONAL (solo si el USB puede perderse y no quieres que nadie use tu
 cuota gratuita):

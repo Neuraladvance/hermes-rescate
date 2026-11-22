@@ -131,6 +131,21 @@ blanco** y el programa sigue sin IA. `config/ia.dat` está en `.gitignore`.
 - `Rescate.bat --ia-contrasena` — cambiar esa contraseña (conserva la caducidad)
 - Si olvidas la contraseña: borra `config/ia.dat` y guarda otra vez la clave.
 
+### Desinstalar dejando el equipo limpio
+
+`winget uninstall` solo llama al desinstalador del fabricante: carpetas, claves de registro,
+servicios y tareas se quedan. HERMES-RESCATE hace lo mismo que Revo Uninstaller:
+
+1. Foto del sistema antes (programas, carpetas, registro, servicios, tareas).
+2. Desinstala con el desinstalador del propio programa.
+3. Foto después y comparación: lista de restos con su tamaño.
+4. **Si un resto lo comparte otro programa, o es una carpeta del sistema, se avisa y no se
+   toca.** Solo se ofrecen los restos propios.
+5. Los restos no se borran: se mueven a `logs/cuarentena/<fecha>` (recuperables) y las claves
+   de registro se exportan a `.reg` antes de eliminarlas.
+
+En el chat: `desinstalar Foxit Reader`.
+
 **Sin clave, todo lo demás funciona igual**: la auditoría, el diagnóstico, las
 reparaciones y el informe no usan IA. Si compartes tu USB con otra persona, borra
 antes `config/config.json` y `config/ia.dat`.

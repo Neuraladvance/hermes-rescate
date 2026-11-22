@@ -316,6 +316,52 @@ def progreso_winget():
     return "%d avisos · %d con porcentaje" % (len(pasos), porcentajes)
 
 
+def restos_desinstalacion():
+    """Detecta restos de una desinstalación y no toca lo compartido."""
+    from nucleo import desinstalador as d
+
+    programa = {"nombre": "FooSoft Editor 3", "editor": "FooSoft",
+                "ubicacion": r"C:\Program Files\FooSoft"}
+    antes = {
+        "programas": [{"nombre": "FooSoft Editor 3", "ubicacion": r"C:\Program Files\FooSoft"},
+                      {"nombre": "BarCad 2026", "ubicacion": r"C:\Program Files\FooSoft\shared"}],
+        "carpetas": [{"ruta": r"C:\Program Files\FooSoft\shared", "carpeta": "shared"},
+                     {"ruta": r"C:\ProgramData\FooSoft", "carpeta": "FooSoft"},
+                     {"ruta": r"C:\Program Files\Common Files", "carpeta": "Common Files"}],
+        "software": [{"clave": "HKLM:\\SOFTWARE\\FooSoft", "nombre": "FooSoft"},
+                     {"clave": "HKLM:\\SOFTWARE\\Microsoft", "nombre": "Microsoft"}],
+        "servicios": [{"nombre": "FooSoftSvc", "visible": "FooSoft Updater"},
+                      {"nombre": "Spooler", "visible": "Cola de impresión"}],
+        "tareas": [{"ruta": "\\FooSoft\\Actualizar"}, {"ruta": "\\Microsoft\\Windows\\Defrag"}],
+    }
+    despues = {
+        "programas": [{"nombre": "BarCad 2026", "ubicacion": r"C:\Program Files\FooSoft\shared"}],
+        "carpetas": antes["carpetas"],
+        "software": antes["software"],
+        "servicios": antes["servicios"],
+        "tareas": [{"ruta": "\\Microsoft\\Windows\\Defrag"}],
+    }
+    quedan = d.restos(programa, antes, despues)
+    nombres = {(e["tipo"], e.get("nombre")) for e in quedan}
+    esperados = {("carpeta", "FooSoft"), ("carpeta", "shared"), ("registro", "FooSoft"),
+                 ("servicio", "FooSoft Updater"), ("tarea", "\\FooSoft\\Actualizar")}
+    faltan = esperados - nombres
+    if faltan:
+        raise AssertionError("no detecta: %s" % faltan)
+    sobra = [n for n in nombres if n[1] in ("Microsoft", "Common Files", "Spooler")
+             or (n[1] and "Defrag" in n[1])]
+    if sobra:
+        raise AssertionError("marca como resto algo del sistema: %s" % sobra)
+    compartidas = [e for e in quedan if e.get("nombre") == "shared"]
+    if not compartidas or not compartidas[0]["compartida"]:
+        raise AssertionError("no avisa de que la carpeta la usa otro programa")
+    borrables = [e for e in quedan if not e["intocable"] and not e["compartida"]]
+    if any(e.get("nombre") == "shared" for e in borrables):
+        raise AssertionError("pretende borrar una carpeta compartida")
+    return "%d restos · %d borrables · %d compartidos" % (
+        len(quedan), len(borrables), len(quedan) - len(borrables))
+
+
 # ====================================================================== D. informe
 def informe_se_genera():
     import rescate
@@ -558,6 +604,7 @@ if __name__ == "__main__":
     check("Procesos en la auditoría", procesos_en_la_auditoria)
     check("Respuesta solo en «reasoning»", modelo_solo_razonamiento)
     check("Progreso de winget paso a paso", progreso_winget)
+    check("Restos de una desinstalación (compartidos a salvo)", restos_desinstalacion)
 
     seccion("B. Catálogo de reparaciones")
     check("Catálogo íntegro", catalogo_completo)
