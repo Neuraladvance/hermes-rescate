@@ -1,0 +1,30 @@
+<html><head><meta charset="utf-8"><title>icono HERMES-RESCATE</title><style>
+html,body{margin:0;padding:0;background:transparent;overflow:hidden}
+#lienzo{width:256px;height:256px;transform-origin:0 0}
+.badge{width:256px;height:256px;border-radius:58px;
+  background:linear-gradient(145deg,#152238,#0b1220 60%,#060b14);
+  box-shadow:inset 0 0 0 7px rgba(56,189,248,.30);
+  display:flex;align-items:center;justify-content:center;position:relative}
+.r{font:800 148px/1 "Segoe UI",Arial,sans-serif;color:#f1f5f9;letter-spacing:-6px;
+  transform:translate(-10px,-6px)}
+.check{position:absolute;right:22px;bottom:22px;width:88px;height:88px;border-radius:50%;
+  background:linear-gradient(145deg,#34d399,#16a34a);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 0 6px rgba(11,18,32,.95)}
+.check svg{width:56px;height:56px}
+</style></head><body>
+<div id="lienzo">
+  <div class="badge"><div class="r">R</div>
+  <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#052e16" stroke-width="3.6"
+   stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.6l5.2 5.2L20 6.4"/></svg></div>
+  </div>
+</div>
+<script>
+// ?t=32 renderiza el mismo diseno escalado: cada tamano del .ico sale dibujado
+// a su resolucion real, no reescalado por Windows.
+var t = parseInt((location.search.match(/t=(\d+)/) || [])[1] || '256', 10);
+document.getElementById('lienzo').style.transform = 'scale(' + (t / 256) + ')';
+document.body.style.width = t + 'px';
+document.body.style.height = t + 'px';
+</script>
+</body></html>

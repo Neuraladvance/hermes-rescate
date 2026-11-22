@@ -1,0 +1,18 @@
+# Runtime Python portátil: se descarga, no se versiona (21 MB de binarios)
+runtime/
+
+# Datos de ejecución: informes y registros de cada equipo auditado
+informes/
+logs/
+
+# Configuración real del técnico (redes WiFi y claves de IA)
+config/wifi.json
+config/config.json
+
+# Copias de seguridad y restos locales
+BACKUP-*/
+*.bak
+*.pyc
+__pycache__/
+Docs/_iconos/
+Docs/_icono256.png

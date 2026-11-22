@@ -1,0 +1,11 @@
+{
+  "redes": [
+    {
+      "nombre": "Mi hotspot",
+      "ssid": "Mi hotspot",
+      "clave": "cambiame-por-tu-contraseña",
+      "prioridad": 1
+    }
+  ],
+  "nota": "Renombra este fichero a wifi.json y pon el SSID y la clave reales. Al guardar desde el menú, la clave queda ofuscada. Ofuscada no es cifrada: no uses aquí una contraseña que también uses en otro sitio."
+}

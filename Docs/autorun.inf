@@ -1,0 +1,14 @@
+; ─────────────────────────────────────────────────────────────────────────
+;  HERMES-RESCATE · etiqueta e icono del USB
+;
+;  Este fichero NO ejecuta nada: solo pone nombre e icono a la unidad en el
+;  Explorador de Windows. Windows no ejecuta AutoRun en memorias USB desde
+;  Windows 7 (por seguridad), así que el programa se abre a mano con
+;  Rescate.bat o Rescate-como-admin.bat.
+;
+;  Debe estar en la RAÍZ del USB, junto a la carpeta HERMES-RESCATE.
+; ─────────────────────────────────────────────────────────────────────────
+
+[autorun]
+label=HERMES-RESCATE
+icon=HERMES-RESCATE\icono.ico

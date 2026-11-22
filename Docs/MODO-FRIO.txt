@@ -1,0 +1,77 @@
+CÓMO ACTUAR CUANDO WINDOWS NO ARRANCA (modo frío)
+=================================================
+
+Este USB es un programa para Windows ya arrancado. Si el equipo no arranca,
+primero se usa el propio Windows de emergencia (WinRE) y, solo si eso no
+basta, un USB de arranque. Aquí está el orden correcto y los comandos exactos.
+
+PASO 1 · ¿Tiene entorno de recuperación?
+----------------------------------------
+En un equipo que sí arranca, el informe dice si WinRE está habilitado
+(«Entorno de recuperación»). Si está deshabilitado, ese equipo no podrá
+repararse solo cuando falle el arranque. Se habilita con:
+    Rescate.bat --reparar habilitar_winre
+
+PASO 2 · Entrar en WinRE sin medios externos
+--------------------------------------------
+Encender el equipo y, al aparecer el logo, apagar a la fuerza con el botón
+(4 segundos). Repetir 3 veces. A la cuarta, Windows entra en «Reparación
+automática» → Opciones avanzadas → Símbolo del sistema.
+
+PASO 3 · Reparar el arranque desde esa consola
+----------------------------------------------
+    bootrec /fixmbr
+    bootrec /fixboot
+    bootrec /scanos
+    bootrec /rebuildbcd
+
+Si `rebuildbcd` no encuentra Windows, comprobar las particiones:
+    diskpart
+      list volume
+      select volume N
+      detail partition      (la partición EFI es FAT32, ~100-500 MB)
+      exit
+
+Comprobar el sistema de archivos antes de nada:
+    chkdsk C: /f /r
+
+Reparar archivos del sistema fuera de línea (índices según `bcdedit`):
+    dism /image:C:\ /cleanup-image /restorehealth
+    sfc /scannow /offbootdir=C:\ /offwindir=C:\Windows
+
+PASO 4 · Si hay que rescatar datos antes de reinstalar
+------------------------------------------------------
+Arrancar un Linux en modo live (Ubuntu, Fedora o similar) desde otro USB:
+detecta NTFS sin reparar nada y copia los datos a un disco externo.
+Si el disco no aparece, es un problema de hardware: no insistir, sustituir.
+
+PASO 5 · USB de arranque con varios sistemas (opcional, gratis)
+--------------------------------------------------------------
+Ventoy (GPL) permite tener varias ISO en un mismo USB y elegir al arrancar:
+  1. Descargar Ventoy y ejecutar Ventoy2Disk.exe desde el PC de trabajo.
+  2. Instalar en el USB (borra el USB entero: hacerlo antes de copiar esto).
+  3. Copiar a la partición grande las ISO que se quieran tener:
+     · ISO de Windows 10/11 (descarga oficial de Microsoft)
+     · una distribución Linux live para rescate de datos
+  4. Reiniciar el equipo averiado, F12/F9/F10 (según marca) y elegir el USB.
+
+Nota sobre licencias: aquí NO se incluye ninguna ISO ni herramienta de
+terceros. Se descargan de su origen oficial (Microsoft, distribución Linux)
+y se usan según su licencia.
+
+PASO 6 · Después de arreglarlo
+------------------------------
+Volver a arrancar Windows y pasar este mismo programa:
+  · Revisar el equipo → deja constancia del estado.
+  · Instalar actualizaciones y drivers (opción 4).
+  · Habilitar WinRE y la restauración del sistema para la próxima vez.
+
+CONTRAEÑA LOCAL OLVIDADA (solo equipos propios o con autorización escrita)
+--------------------------------------------------------------------------
+Desde WinRE → Símbolo del sistema:
+    copy C:\Windows\System32\utilman.exe C:\Windows\System32\utilman.bak
+    copy C:\Windows\System32\cmd.exe C:\Windows\System32\utilman.exe
+Reiniciar, pulsar el botón de accesibilidad (abre consola como SYSTEM):
+    net user <usuario> <nueva_clave>
+Al terminar, restaurar:
+    copy C:\Windows\System32\utilman.bak C:\Windows\System32\utilman.exe

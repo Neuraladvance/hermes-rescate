@@ -1,0 +1,11 @@
+{
+  "ia": {
+    "endpoint": "https://openrouter.ai/api/v1",
+    "modelo": "nombre-del-modelo",
+    "clave": "tu-clave",
+    "temperatura": 0.2,
+    "max_tokens": 1200,
+    "aviso_privacidad": true
+  },
+  "nota": "Opcional. Renombra este fichero a config.json y rellena endpoint, modelo y clave de cualquier API compatible con OpenAI. Sin esto el programa funciona igual: la auditoría y las reparaciones no usan IA. La clave se guarda en el USB: si pierdes el USB, revócala."
+}

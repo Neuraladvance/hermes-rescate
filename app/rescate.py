@@ -1,0 +1,585 @@
+# -*- coding: utf-8 -*-
+"""HERMES-RESCATE: agente portatil de auditoria y reparacion de PCs Windows.
+
+Uso:
+  Rescate.bat                  menu interactivo
+  Rescate.bat --auditar        auditoria completa + informe (sin preguntar)
+  Rescate.bat --auto           auditoria + reparaciones seguras recomendadas
+  Rescate.bat --reparar ID     ejecuta una reparacion del catalogo
+  Rescate.bat --listar         lista el catalogo
+  Rescate.bat --wifi           conecta al WiFi/hotspot configurado
+  Rescate.bat --actualizar     instala las actualizaciones de Windows
+  Rescate.bat --drivers        instala solo controladores desde Windows Update
+  Rescate.bat --instalar X     instala un programa por id de winget o nombre
+  Rescate.bat --chat           conversacion con la IA (si esta configurada)
+  Rescate.bat --estado         estado rapido del equipo y del programa
+Opciones: --sin-lento (omite Defender/BitLocker/actualizaciones), --si (no preguntar)
+"""
+import ctypes
+import os
+import sys
+
+RAIZ_APP = os.path.dirname(os.path.abspath(__file__))
+if RAIZ_APP not in sys.path:
+    sys.path.insert(0, RAIZ_APP)
+
+from nucleo import auditoria, diagnostico, informe, reparaciones, util  # noqa: E402
+
+C = util
+ANCHO = 78
+
+
+# ------------------------------------------------------------------ pintado
+def titulo(texto):
+    print("\n" + C.color("─" * ANCHO, C.GRIS))
+    print(C.color(" " + texto, C.NEGRITA + ";" + C.CIAN))
+    print(C.color("─" * ANCHO, C.GRIS))
+
+
+def paso(texto):
+    print(C.color("  · ", C.GRIS) + texto)
+
+
+def bien(texto):
+    print(C.color("  ✓ ", C.VERDE) + texto)
+
+
+def mal(texto):
+    print(C.color("  ✗ ", C.ROJO) + texto)
+
+
+def ojo(texto):
+    print(C.color("  ! ", C.AMARILLO) + texto)
+
+
+def preguntar(texto, defecto="s"):
+    try:
+        respuesta = input("  %s [%s/%s]: " % (texto, "S" if defecto == "s" else "s",
+                                              "s" if defecto == "s" else "N")).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+    if not respuesta:
+        return defecto == "s"
+    return respuesta.startswith("s")
+
+
+# ------------------------------------------------------------------ admin
+def es_admin():
+    return util.es_admin()
+
+
+def relanzar_admin():
+    """Se relanza elevado con UAC pidiendo la misma orden."""
+    if es_admin():
+        return False
+    ejecutable = sys.executable
+    argumentos = " ".join('"%s"' % a if " " in a else a for a in sys.argv)
+    try:
+        resultado = ctypes.windll.shell32.ShellExecuteW(None, "runas", ejecutable, argumentos, RAIZ_APP, 1)
+        return resultado > 32
+    except Exception as exc:
+        mal("No se pudo pedir elevación: %s" % exc)
+        return False
+
+
+# ------------------------------------------------------------------ auditoria
+def ejecutar_auditoria(con_lento=True):
+    inicio = util.time.time() if hasattr(util, "time") else 0
+    print(C.color("\n  Analizando el equipo. Tarda unos 30 segundos: no cierres esta ventana.", C.GRIS))
+    datos = auditoria.auditar(con_lento=con_lento, aviso=lambda m: paso(m))
+    datos["_inicio"] = inicio
+    hallazgos, resumen = diagnostico.evaluar(datos)
+    return datos, hallazgos, resumen
+
+
+def pintar_veredicto(datos, hallazgos, resumen):
+    so = datos.get("so") or {}
+    veredicto = resumen["veredicto"]
+    color = {diagnostico.CRITICO: C.ROJO, diagnostico.AVISO: C.AMARILLO}.get(veredicto, C.VERDE)
+    titulo("Resultado")
+    print("  %s · %s · %s" % (datos.get("equipo"), so.get("nombre"), so.get("modelo")))
+    print("  %s" % C.color(resumen["titulo"].upper(), color + ";" + C.NEGRITA))
+    print("  %d críticos · %d a revisar · %d informativos"
+          % (resumen["cuenta"].get("critico", 0), resumen["cuenta"].get("aviso", 0),
+             resumen["cuenta"].get("info", 0)))
+    print()
+    for x in hallazgos:
+        marca = {diagnostico.CRITICO: C.color("●", C.ROJO),
+                 diagnostico.AVISO: C.color("●", C.AMARILLO),
+                 diagnostico.INFO: C.color("●", C.AZUL)}.get(x["severidad"], "·")
+        print("  %s %s" % (marca, x["titulo"]))
+        if x["severidad"] != diagnostico.INFO:
+            print("     " + C.color(x["detalle"][:150], C.GRIS))
+
+
+def informar(datos, hallazgos, resumen, ejecuciones=None):
+    rutas = informe.generar(datos, hallazgos, resumen, ejecuciones)
+    titulo("Informe guardado")
+    print("  HTML : %s" % rutas["html"])
+    print("  MD   : %s" % rutas["md"])
+    if rutas.get("json"):
+        print("  Datos: %s" % rutas["json"])
+    return rutas
+
+
+# ------------------------------------------------------------------ reparaciones
+def aplicar_recomendadas(datos, hallazgos, resumen, auto=False):
+    ids = diagnostico.recomendadas(hallazgos)
+    if not ids:
+        bien("No hay nada que reparar: el equipo está correcto.")
+        return []
+    seguras = [i for i in ids if reparaciones.obtener(i) and reparaciones.obtener(i)["nivel"] == 1]
+    cambio = [i for i in ids if reparaciones.obtener(i) and reparaciones.obtener(i)["nivel"] == 2]
+    manual = [i for i in ids if reparaciones.obtener(i) and reparaciones.obtener(i)["nivel"] == 3]
+
+    titulo("Acciones recomendadas")
+    for grupo, etiqueta in ((seguras, "Seguras"), (cambio, "Cambian configuración"), (manual, "Manuales")):
+        if not grupo:
+            continue
+        print(C.color("  %s:" % etiqueta, C.GRIS))
+        for rid in grupo:
+            r = reparaciones.obtener(rid)
+            extra = []
+            if r["admin"]:
+                extra.append("admin")
+            if r["red"]:
+                extra.append("internet")
+            if r["lento"]:
+                extra.append("lento")
+            print("    - %-46s %s" % (r["nombre"][:46], C.color("(%s)" % ", ".join(extra), C.GRIS)
+                                      if extra else ""))
+
+    ejecuciones = []
+    seleccion = list(seguras)
+    if cambio:
+        print()
+        for rid in cambio:
+            if auto:
+                continue
+            r = reparaciones.obtener(rid)
+            if preguntar("¿Aplicar «%s»? %s" % (r["nombre"], C.color(r["cuando"], C.GRIS), "n"), "n"):
+                seleccion.append(rid)
+    for rid in manual:
+        r = reparaciones.obtener(rid)
+        ojo("Manual: %s (no se ejecuta solo)" % r["nombre"])
+
+    if not seleccion:
+        print("\n  No se ha seleccionado ninguna acción.")
+        return []
+
+    if any(reparaciones.obtener(i)["nivel"] == 2 for i in seleccion) and es_admin():
+        if (not auto) and preguntar("¿Crear un punto de restauración antes? (recomendado)", "s"):
+            paso("Creando punto de restauración...")
+            registro = reparaciones.ejecutar("punto_restauracion", aviso=paso)
+            ejecuciones.append(registro)
+            (bien if registro["ok"] else ojo)("Punto de restauración: %s" % registro["mensaje"])
+
+    titulo("Ejecutando")
+    for rid in seleccion:
+        r = reparaciones.obtener(rid)
+        print("  %s %s" % (C.color("▶", C.CIAN), r["nombre"]))
+        registro = reparaciones.ejecutar(rid, aviso=lambda m: print("      " + C.color(m, C.GRIS)))
+        ejecuciones.append(registro)
+        if registro.get("manual"):
+            print(registro["detalle"])
+        elif registro["ok"]:
+            bien("%s (%s)" % (registro["mensaje"], _dur(registro.get("segundos"))))
+        else:
+            mal("%s (%s)" % (registro["mensaje"], _dur(registro.get("segundos"))))
+        print()
+    return ejecuciones
+
+
+def _dur(segundos):
+    try:
+        segundos = float(segundos or 0)
+    except Exception:
+        return "?"
+    return "%.1f s" % segundos if segundos < 90 else "%.1f min" % (segundos / 60)
+
+
+# ------------------------------------------------------------------ submenus
+def menu_wifi():
+    from nucleo import wifi
+    titulo("Red WiFi")
+    adaptador = wifi.adaptador_wifi()
+    if not adaptador:
+        mal("Este equipo no tiene adaptador WiFi utilizable (o le faltan los controladores).")
+        print("  Alternativas: cable de red, o compartir la conexión del móvil por USB.")
+        return
+    print("  Estado actual: %s" % (wifi.estado_conexion() or "sin conexión"))
+    print("\n  Redes configuradas en este USB:")
+    for red in wifi.cargar().get("redes") or []:
+        print("    · %-20s (SSID: %s)" % (red.get("nombre"), red.get("ssid")))
+    if not (wifi.cargar().get("redes") or []):
+        print("    (ninguna todavía: usa la opción de abajo para escanear y guardar la tuya)")
+    if preguntar("¿Conectar a la primera configurada?", "s"):
+        for red in sorted(wifi.cargar().get("redes") or [], key=lambda r: r.get("prioridad", 9)):
+            ok, mensaje = wifi.conectar(red.get("ssid", ""), wifi.desofuscar(red.get("clave", "")), aviso=paso)
+            if ok:
+                bien(mensaje)
+                return
+            mal(mensaje)
+    if preguntar("¿Ver las redes visibles y conectar a una?", "n"):
+        redes = wifi.escanear()
+        for i, red in enumerate(redes, 1):
+            print("   %2d. %-28s %s" % (i, red.get("ssid"), red.get("senal") or ""))
+        try:
+            elegida = int(input("  Número (0 para salir): ") or 0)
+        except ValueError:
+            return
+        if 1 <= elegida <= len(redes):
+            ssid = redes[elegida - 1]["ssid"]
+            clave = input("  Contraseña de «%s»: " % ssid)
+            ok, mensaje = wifi.conectar(ssid, clave, aviso=paso)
+            (bien if ok else mal)(mensaje)
+            if ok and preguntar("¿Guardarla en el USB para la próxima vez?", "s"):
+                wifi.configurar(ssid, ssid, clave)
+                bien("Guardada (ofuscada) en config/wifi.json")
+
+
+def menu_actualizar():
+    from nucleo import instalador
+    titulo("Actualizaciones de Windows")
+    if not es_admin():
+        mal("Hace falta ejecutar el programa como administrador.")
+        if preguntar("¿Reiniciar ahora con permisos de administrador?", "s"):
+            relanzar_admin()
+        return
+    if not preguntar("Se van a descargar e instalar TODAS las actualizaciones pendientes. "
+                     "Puede tardar de 20 minutos a varias horas. ¿Continuar?", "n"):
+        return
+    resultado = instalador.actualizar_windows(aviso=paso)
+    titulo("Resultado de Windows Update")
+    if resultado.get("error"):
+        mal(resultado["error"])
+        return
+    print("  Instaladas: %d   ·   Con problemas: %d"
+          % (len(resultado.get("hechas") or []), len(resultado.get("fallidas") or [])))
+    for h in resultado.get("hechas") or []:
+        bien("%s (%s)" % (h.get("titulo"), h.get("resultado")))
+    for f in resultado.get("fallidas") or []:
+        mal("%s — %s" % (f.get("titulo"), f.get("motivo")))
+    if resultado.get("reinicio_necesario"):
+        ojo("Hace falta reiniciar para terminar de aplicar los cambios.")
+
+
+def menu_instalar():
+    from nucleo import instalador
+    titulo("Instalar programas")
+    version = instalador.winget_disponible()
+    if not version:
+        mal("Este equipo no tiene winget (Administrador de paquetes de Windows).")
+        print("  Se instala solo desde Microsoft Store con la app «Instalador de aplicaciones».")
+        print("  Mientras tanto, los programas se pueden descargar a mano.")
+        return
+    print("  winget %s" % version)
+    print("\n  Programas habituales:")
+    for i, programa in enumerate(instalador.CATALOGO_PROGRAMAS, 1):
+        print("   %2d. %-24s %s" % (i, programa["nombre"], C.color(programa["para"], C.GRIS)))
+    print("    b. Buscar por nombre")
+    print("    0. Volver")
+    eleccion = input("\n  Opción: ").strip().lower()
+    if eleccion == "b":
+        termino = input("  Buscar: ").strip()
+        resultados = instalador.buscar(termino)
+        if not resultados:
+            mal("Sin resultados.")
+            return
+        for i, r in enumerate(resultados, 1):
+            print("   %2d. %-34s %s" % (i, r["nombre"][:34], C.color(r["id"], C.GRIS)))
+        try:
+            indice = int(input("  Número a instalar (0 para salir): ") or 0)
+        except ValueError:
+            return
+        if not (1 <= indice <= len(resultados)):
+            return
+        elegido = resultados[indice - 1]["id"]
+    elif eleccion.isdigit() and 1 <= int(eleccion) <= len(instalador.CATALOGO_PROGRAMAS):
+        elegido = instalador.CATALOGO_PROGRAMAS[int(eleccion) - 1]["id"]
+    else:
+        return
+    if not preguntar("¿Instalar %s en modo silencioso?" % elegido, "s"):
+        return
+    paso("Instalando %s (puede tardar varios minutos)..." % elegido)
+    ok, salida = instalador.instalar(elegido)
+    (bien if ok else mal)("Instalación %s" % ("completada" if ok else "con errores"))
+    if not ok:
+        print(C.color(salida[-800:], C.GRIS))
+
+
+def menu_catalogo(datos=None, hallazgos=None, resumen=None):
+    titulo("Catálogo de reparaciones")
+    grupos = reparaciones.por_categoria()
+    indice = []
+    for categoria in sorted(grupos):
+        print(C.color("\n  %s" % categoria.upper(), C.GRIS))
+        for r in grupos[categoria]:
+            indice.append(r["id"])
+            requisitos = []
+            if r["admin"]:
+                requisitos.append("admin")
+            if r["red"]:
+                requisitos.append("internet")
+            print("   %2d. %-44s %-18s %s"
+                  % (len(indice), r["nombre"][:44], reparaciones.NIVELES[r["nivel"]],
+                     C.color(", ".join(requisitos), C.GRIS)))
+    print("\n   0. Volver")
+    entrada = input("\n  Número (o varios separados por coma): ").strip()
+    if not entrada or entrada == "0":
+        return []
+    seleccion = []
+    for trozo in entrada.replace(" ", ",").split(","):
+        if trozo.isdigit() and 1 <= int(trozo) <= len(indice):
+            seleccion.append(indice[int(trozo) - 1])
+    ejecuciones = []
+    for rid in seleccion:
+        r = reparaciones.obtener(rid)
+        if r["nivel"] == 3:
+            print("\n  %s\n%s" % (C.color(r["nombre"], C.CIAN + ";" + C.NEGRITA), r["que"]))
+            registro = reparaciones.ejecutar(rid)
+            print(registro["detalle"])
+            continue
+        riesgo = "SEGURO" if r["nivel"] == 1 else "CAMBIA CONFIGURACIÓN"
+        if r["nivel"] == 2 and not preguntar("%s (%s). ¿Continuar?" % (r["nombre"], riesgo), "n"):
+            continue
+        print("  %s %s" % (C.color("▶", C.CIAN), r["nombre"]))
+        registro = reparaciones.ejecutar(rid, aviso=lambda m: print("      " + C.color(m, C.GRIS)))
+        ejecuciones.append(registro)
+        (bien if registro["ok"] else mal)("%s (%s)" % (registro["mensaje"], _dur(registro.get("segundos"))))
+    return ejecuciones
+
+
+def menu_chat(datos, hallazgos, resumen):
+    from nucleo import ia
+    titulo("Hablar con la IA")
+    cfg = ia.config()
+    if not ia.disponible():
+        mal("No hay IA configurada (y no hace falta para nada de lo anterior).")
+        print("  Para activarla, en config/config.json rellena:")
+        print('    "ia": { "endpoint": "https://.../v1", "modelo": "...", "clave": "..." }')
+        if preguntar("¿Configurarla ahora?", "n"):
+            endpoint = input("  endpoint (p.ej. https://openrouter.ai/api/v1): ").strip()
+            modelo = input("  modelo: ").strip()
+            clave = input("  clave: ").strip()
+            if endpoint and modelo and clave:
+                ia.guardar_config(endpoint=endpoint, modelo=modelo, clave=clave)
+                bien("Guardada en config/config.json")
+        return
+    agente = ia.Agente(datos, hallazgos, resumen, cfg)
+    print(agente.aviso_privacidad())
+    if not preguntar("¿Enviar este resumen y empezar la conversación?", "n"):
+        print("  Cancelado: no se ha enviado nada.")
+        return
+    print("\n  Escribe tu pregunta. «salir» para terminar, «accion <id>» para ejecutar una del catálogo.\n")
+    while True:
+        try:
+            texto = input(C.color("  tú › ", C.CIAN)).strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if not texto or texto.lower() in ("salir", "exit", "quit"):
+            return
+        if texto.lower().startswith("accion "):
+            rid = texto.split(None, 1)[1].strip()
+            _ejecutar_con_confirmacion(rid)
+            continue
+        try:
+            respuesta, acciones = agente.preguntar(texto)
+        except RuntimeError as exc:
+            mal(str(exc))
+            continue
+        print("\n" + "\n".join("  " + linea for linea in respuesta.splitlines()) + "\n")
+        for rid in acciones:
+            r = reparaciones.obtener(rid)
+            if r and preguntar("La IA propone «%s». ¿Ejecutarla?" % r["nombre"], "n"):
+                _ejecutar_con_confirmacion(rid)
+
+
+def _ejecutar_con_confirmacion(rid):
+    r = reparaciones.obtener(rid)
+    if not r:
+        mal("Esa acción no existe en el catálogo: %s" % rid)
+        return
+    if r["nivel"] == 3:
+        print(r["que"])
+        print(reparaciones.ejecutar(rid)["detalle"])
+        return
+    registro = reparaciones.ejecutar(rid, aviso=lambda m: print("      " + C.color(m, C.GRIS)))
+    (bien if registro["ok"] else mal)("%s (%s)" % (registro["mensaje"], _dur(registro.get("segundos"))))
+
+
+# ------------------------------------------------------------------ menu
+def cabecera():
+    so = {}
+    try:
+        rc, out, _ = util.ejecutar(["cmd", "/c", "ver"], timeout=10)
+    except Exception:
+        out = ""
+    print(C.color("\n  HERMES-RESCATE 1.0", C.NEGRITA + ";" + C.CIAN)
+          + C.color("  ·  auditoría y reparación de equipos Windows", C.GRIS))
+    print(C.color("  " + "═" * (ANCHO - 2), C.GRIS))
+    print("  Equipo: %s   Usuario: %s   Admin: %s"
+          % (os.environ.get("COMPUTERNAME"), os.environ.get("USERNAME"),
+             C.color("sí", C.VERDE) if es_admin() else C.color("NO", C.AMARILLO)))
+    try:
+        from nucleo import wifi
+        estado = wifi.estado_conexion()
+        print("  Red: %s" % (estado or "sin conexión"))
+    except Exception:
+        pass
+    print("  USB: %s" % os.path.dirname(RAIZ_APP))
+
+
+def menu_principal():
+    datos = hallazgos = resumen = None
+    while True:
+        cabecera()
+        print(C.color("  " + "─" * (ANCHO - 2), C.GRIS))
+        if not es_admin():
+            print("  " + C.color("A. Reiniciar como administrador", C.AMARILLO)
+                  + C.color("  (necesario para la mayoría de reparaciones)", C.GRIS))
+        print("  1. Revisar el equipo y generar informe")
+        print("  2. Reparar lo recomendado")
+        print("  3. Conectar al WiFi del técnico (hotspot)")
+        print("  4. Instalar actualizaciones de Windows")
+        print("  5. Instalar programas")
+        print("  6. Catálogo de reparaciones")
+        print("  7. Hablar con la IA")
+        print("  8. Abrir la carpeta de informes")
+        print("  0. Salir")
+        try:
+            opcion = input(C.color("\n  Opción: ", C.NEGRITA)).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+
+        if opcion == "0":
+            return 0
+        if opcion == "a":
+            if not relanzar_admin():
+                ojo("No se pudo elevar (o ya eres administrador).")
+            continue
+        if opcion == "1":
+            datos, hallazgos, resumen = ejecutar_auditoria()
+            pintar_veredicto(datos, hallazgos, resumen)
+            informar(datos, hallazgos, resumen)
+        elif opcion == "2":
+            if datos is None:
+                datos, hallazgos, resumen = ejecutar_auditoria()
+                pintar_veredicto(datos, hallazgos, resumen)
+            ejecuciones = aplicar_recomendadas(datos, hallazgos, resumen)
+            if ejecuciones:
+                informar(datos, hallazgos, resumen, ejecuciones)
+        elif opcion == "3":
+            menu_wifi()
+        elif opcion == "4":
+            menu_actualizar()
+        elif opcion == "5":
+            menu_instalar()
+        elif opcion == "6":
+            ejecuciones = menu_catalogo()
+            if ejecuciones and datos is not None:
+                informar(datos, hallazgos, resumen, ejecuciones)
+        elif opcion == "7":
+            if datos is None:
+                datos, hallazgos, resumen = ejecutar_auditoria()
+                pintar_veredicto(datos, hallazgos, resumen)
+            menu_chat(datos, hallazgos, resumen)
+        elif opcion == "8":
+            os.startfile(util.INFORMES)
+        else:
+            ojo("Opción no válida.")
+
+
+def menu_estado():
+    from nucleo import wifi, instalador, ia
+    titulo("Estado")
+    print("  Admin        : %s" % ("sí" if es_admin() else "NO"))
+    print("  Windows      : %s" % (os.environ.get("OS")))
+    print("  USB          : %s" % os.path.dirname(RAIZ_APP))
+    print("  WiFi         : %s" % (wifi.estado_conexion() or "sin red"))
+    print("  winget       : %s" % (instalador.winget_disponible() or "no disponible"))
+    print("  IA           : %s" % ("configurada (%s)" % ia.config()["modelo"] if ia.disponible()
+                                 else "sin configurar (el programa funciona igual)"))
+    print("  Informes     : %s" % util.INFORMES)
+    print("  Redes WiFi   : %s" % ", ".join(r.get("ssid") or "?" for r in wifi.cargar().get("redes") or []))
+
+
+# ------------------------------------------------------------------ CLI
+def main():
+    util.preparar_consola()
+    util.habilitar_ansi()
+    argumentos = sys.argv[1:]
+    sin_lento = "--sin-lento" in argumentos
+    automatico = "--si" in argumentos or "--auto" in argumentos
+
+    if "--estado" in argumentos:
+        menu_estado()
+        return 0
+    if "--listar" in argumentos:
+        titulo("Catálogo de reparaciones")
+        for categoria, lista in sorted(reparaciones.por_categoria().items()):
+            print(C.color("\n  %s" % categoria.upper(), C.GRIS))
+            for r in lista:
+                print("   %-22s %-44s %s" % (r["id"][:22], r["nombre"][:44],
+                                             reparaciones.NIVELES[r["nivel"]]))
+        return 0
+    if "--wifi" in argumentos:
+        menu_wifi()
+        return 0
+    if "--actualizar" in argumentos or "--drivers" in argumentos:
+        from nucleo import instalador
+        solo_drivers = "--drivers" in argumentos
+        paso("Instalando %s (puede tardar mucho)..." % ("controladores" if solo_drivers else "actualizaciones"))
+        resultado = instalador.actualizar_windows(solo_drivers=solo_drivers, aviso=paso)
+        if resultado.get("error"):
+            mal(resultado["error"])
+            return 1
+        bien("%d instaladas, %d con problemas"
+             % (len(resultado.get("hechas") or []), len(resultado.get("fallidas") or [])))
+        return 0
+    if "--instalar" in argumentos:
+        from nucleo import instalador
+        indice = argumentos.index("--instalar")
+        paquete = argumentos[indice + 1] if len(argumentos) > indice + 1 else ""
+        if not paquete:
+            mal("Falta el id del paquete. Ejemplo: --instalar 7zip.7zip")
+            return 2
+        paso("Instalando %s..." % paquete)
+        ok, salida = instalador.instalar(paquete)
+        (bien if ok else mal)("Instalación %s" % ("completada" if ok else "con errores"))
+        if not ok:
+            print(salida[-800:])
+        return 0 if ok else 1
+    if "--reparar" in argumentos:
+        indice = argumentos.index("--reparar")
+        ids = argumentos[indice + 1].split(",") if len(argumentos) > indice + 1 else []
+        ejecuciones = []
+        for rid in ids:
+            print("  ▶ %s" % rid)
+            registro = reparaciones.ejecutar(rid, aviso=lambda m: print("      " + m))
+            ejecuciones.append(registro)
+            (bien if registro["ok"] else mal)("%s (%s)" % (registro["mensaje"], _dur(registro.get("segundos"))))
+        return 0 if all(e["ok"] for e in ejecuciones) else 1
+
+    if "--auditar" in argumentos or "--auto" in argumentos or argumentos:
+        datos, hallazgos, resumen = ejecutar_auditoria(con_lento=not sin_lento)
+        pintar_veredicto(datos, hallazgos, resumen)
+        ejecuciones = []
+        if "--auto" in argumentos:
+            ejecuciones = aplicar_recomendadas(datos, hallazgos, resumen, auto=automatico)
+        rutas = informar(datos, hallazgos, resumen, ejecuciones)
+        print("\n  Informe: %s" % rutas["html"])
+        return 0
+
+    try:
+        return menu_principal()
+    except KeyboardInterrupt:
+        print("\n  Interrumpido.")
+        return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main())
