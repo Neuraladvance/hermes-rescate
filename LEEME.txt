@@ -18,6 +18,19 @@ Para ejecuciones desatendidas (scripts) se puede responder de antemano:
 Para volver a leer el aviso cuando quieras:
     Rescate.bat --aviso
 
+CLAVE DE IA CIFRADA (contraseña del USB)
+----------------------------------------
+La clave de OpenRouter va cifrada en config\ia.dat y se pide una contraseña al
+usarla. Sin ella todo funciona menos el chat de IA.
+
+    Dejar en blanco en el prompt  →  sigue sin IA (nada se bloquea)
+    Rescate.bat --ia-contrasena   →  cambiar la contraseña (pide la actual)
+    Rescate.bat --ia-clave        →  guardar otra clave desde cero
+
+La contraseña está apuntada en la carpeta KEYS del técnico
+(hermes-rescate-USB-contrasena_<fecha>.txt). Si se olvida del todo: borrar
+config\ia.dat y volver a guardar la clave con --ia-clave.
+
 SIMULACIÓN COMPLETA (buscar fallos sin tocar el equipo)
 ------------------------------------------------------
     runtime\python\python.exe tests\simulacion.py

@@ -433,11 +433,18 @@ def _desbloquear_ia():
         return cfg
     titulo("Clave de IA protegida")
     print("  La clave de este USB está cifrada. Escribe la contraseña para usarla.")
+    print(C.color("  La contraseña está apuntada en la carpeta KEYS del técnico:", C.GRIS))
+    print(C.color("    hermes-rescate-USB-contrasena_<fecha>.txt", C.GRIS))
+    print(C.color("  Deja en blanco para seguir SIN inteligencia artificial "
+                  "(todo lo demás funciona).", C.GRIS))
     for intento in (1, 2, 3):
         try:
             password = getpass.getpass("  contraseña del USB (%d/3): " % intento)
         except (EOFError, KeyboardInterrupt):
             print()
+            return None
+        if not password.strip():
+            ojo("Se sigue sin IA: auditoría, reparaciones e informes funcionan igual.")
             return None
         try:
             meta = ia.desbloquear(password)
@@ -453,9 +460,10 @@ def _desbloquear_ia():
     return None
 
 
-def _cifrar_clave_pedida(clave):
+def _cifrar_clave_pedida(clave, meta=None):
     """Pide contraseña y guarda la clave cifrada en config/ia.dat."""
     from nucleo import ia
+    meta = meta or {}
     for _ in range(3):
         try:
             una = getpass.getpass("  contraseña para cifrar (mínimo 8 caracteres): ")
@@ -469,7 +477,9 @@ def _cifrar_clave_pedida(clave):
         if una != otra:
             mal("No coinciden.")
             continue
-        ruta = ia.cifrar_clave(clave, una)
+        ruta = ia.cifrar_clave(clave, una,
+                               caduca=meta.get("caduca") or None,
+                               nombre=meta.get("nombre") or "HERMES-RESCATE-USB")
         ia.guardar_config(clave="")
         bien("Clave cifrada en %s" % ruta)
         ojo("Sin esa contraseña la clave NO se puede recuperar. Apúntala en un sitio seguro.")
@@ -856,6 +866,30 @@ def main():
     if "--estado" in argumentos:
         menu_estado()
         return 0
+    if "--ia-contrasena" in argumentos:
+        from nucleo import ia
+        titulo("Cambiar la contraseña de la clave cifrada")
+        if not ia.hay_clave_cifrada():
+            mal("No hay ninguna clave cifrada (config/ia.dat) en este USB.")
+            return 1
+        print("  Se pide la contraseña actual para poder volver a cifrar con la nueva.")
+        try:
+            actual = getpass.getpass("  contraseña actual: ")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 1
+        try:
+            meta = ia.desbloquear(actual)
+        except RuntimeError as exc:
+            mal(str(exc))
+            return 1
+        clave = ia.clave_efectiva()
+        if not clave:
+            mal("No se pudo leer la clave descifrada.")
+            return 1
+        bien("Clave descifrada. Ahora escribe la contraseña nueva.")
+        return 0 if _cifrar_clave_pedida(clave, meta) else 1
+
     if "--ia-clave" in argumentos:
         from nucleo import ia
         titulo("Guardar la clave de IA")
