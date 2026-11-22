@@ -256,11 +256,25 @@ def evaluar(datos):
                % (proxy.get("servidor") or "?"), reparaciones=["reset_proxy"])
 
     hosts = datos.get("hosts") or {}
-    if _n(hosts.get("entradas")) > 20:
-        _halla(h, "hosts", INFO, "%d entradas en el fichero hosts" % int(_n(hosts.get("entradas"))),
-               "Es mucho para un equipo doméstico. Si no las has puesto tú (VPN, Tailscale), "
-               "pueden redirigir dominios a otro sitio.", reparaciones=["limpiar_hosts"],
-               datos={"muestra": hosts.get("muestra") or []})
+    # "otras" = entradas que no son loopback ni Tailscale. En auditorías antiguas no
+    # existe el desglose y se usa el total.
+    otras = hosts.get("otras")
+    if otras is None:
+        otras = hosts.get("entradas")
+    otras, tailscale = int(_n(otras)), int(_n(hosts.get("tailscale")))
+    if otras > 20:
+        _halla(h, "hosts", AVISO, "%d entradas ajenas en el fichero hosts" % otras,
+               "Es mucho para un equipo doméstico y no son de Tailscale. Pueden redirigir "
+               "dominios a otro sitio (publicidad, páginas que no cargan, avisos falsos).",
+               reparaciones=["limpiar_hosts"], datos={"muestra": hosts.get("muestra") or []})
+    elif otras > 0:
+        _halla(h, "hosts_varias", INFO, "%d entrada(s) en el fichero hosts" % otras,
+               "Pocas y no de Tailscale: revisa la muestra; si no las has puesto tú, "
+               "restaurar el hosts las quita.", datos={"muestra": hosts.get("muestra") or []})
+    if tailscale > 0:
+        _halla(h, "hosts_tailscale", INFO, "%d entradas de Tailscale en el fichero hosts"
+               % tailscale, "Las escribe la VPN de Tailscale (100.64.0.0/10 y *.ts.net). "
+               "Son normales y no se tocan.")
 
     # ---------------------------------------------------------------- energia / bateria
     bateria = datos.get("bateria") or {}

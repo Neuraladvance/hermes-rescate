@@ -459,21 +459,35 @@ def _limpiar_hosts(aviso):
 $h = "$env:SystemRoot\System32\drivers\etc\hosts"
 if (Test-Path $h) {
     Copy-Item $h -Destination ("$h.hermes-rescate-" + (Get-Date -Format 'yyyyMMdd-HHmmss')) -Force
-    $lineas = @(
+    $lineas = @(Get-Content $h | Where-Object { $_.Trim() -ne '' -and -not $_.Trim().StartsWith('#') })
+    # Se conservan las entradas de Tailscale (100.64.0.0/10 y *.ts.net): las escribe la
+    # VPN y borrarlas dejaría el equipo sin acceso por Tailscale.
+    $conservar = @($lineas | Where-Object { $_ -match '(?i)\.ts\.net' -or $_ -match '^\s*100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.' })
+    $nuevas = @(
         '# Copyright (c) 1993-2009 Microsoft Corp.',
         '# Fichero hosts restaurado por HERMES-RESCATE',
         '127.0.0.1 localhost',
-        '::1 localhost',
-        ''
-    )
-    Set-Content -Path $h -Value $lineas -Encoding ASCII
-    "hosts restaurado"
+        '::1 localhost'
+    ) + $conservar + @('')
+    Set-Content -Path $h -Value $nuevas -Encoding ASCII
+    "hosts restaurado conservadas=" + $conservar.Count
 } else { "no existe el fichero hosts" }
 '''
     rc, out, err = _ps(script, timeout=120)
     ok = "hosts restaurado" in (out or "")
-    return ok, ("Fichero hosts restaurado (la copia se guardó junto al original)." if ok
-                else "No se pudo restaurar el fichero hosts."), _cola((out or "") + " " + (err or "") + " " + copia)
+    conservadas = 0
+    for trozo in (out or "").split():
+        if trozo.startswith("conservadas="):
+            try:
+                conservadas = int(trozo.split("=")[1])
+            except ValueError:
+                conservadas = 0
+    if ok:
+        mensaje = "Fichero hosts restaurado (la copia se guardó junto al original)"
+        if conservadas:
+            mensaje += "; %d entradas de Tailscale conservadas" % conservadas
+        return True, mensaje + ".", _cola((out or "") + " " + (err or "") + " " + copia)
+    return False, "No se pudo restaurar el fichero hosts.", _cola((out or "") + " " + (err or "") + " " + copia)
 
 
 # ====================================================================== manuales (nivel 3)

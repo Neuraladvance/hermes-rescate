@@ -332,7 +332,18 @@ try {
     $h = "$env:SystemRoot\System32\drivers\etc\hosts"
     if (Test-Path $h) {
         $lineas = @(Get-Content $h | Where-Object { $_.Trim() -ne '' -and -not $_.Trim().StartsWith('#') })
-        $d.hosts = [ordered]@{ entradas = $lineas.Count; muestra = @($lineas | Select-Object -First 15) }
+        # Clasificar: loopback (normal), Tailscale (100.64.0.0/10 y *.ts.net, lo pone la VPN)
+        # y el resto, que es lo único que puede ser sospechoso.
+        $loop = @($lineas | Where-Object { $_ -match '^\s*(127\.0\.0\.1|::1)\s' })
+        $ts = @($lineas | Where-Object { $_ -match '(?i)\.ts\.net' -or $_ -match '^\s*100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.' })
+        $otras = @($lineas | Where-Object { ($loop -notcontains $_) -and ($ts -notcontains $_) })
+        $d.hosts = [ordered]@{
+            entradas  = $lineas.Count
+            loopback  = $loop.Count
+            tailscale = $ts.Count
+            otras     = $otras.Count
+            muestra   = @($otras | Select-Object -First 15)
+        }
     }
 } catch { }
 Marca 'red'
