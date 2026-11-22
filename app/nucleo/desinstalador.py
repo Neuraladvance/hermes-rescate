@@ -33,6 +33,18 @@ def _normal(texto):
     return re.sub(r"[^a-z0-9]+", " ", (texto or "").lower()).strip()
 
 
+def _palabras_id(termino):
+    """Palabras de un id de winget: «Foxit.FoxitReader» → [foxit, reader]."""
+    salida = []
+    for parte in re.split(r"[._\-]+", termino or ""):
+        for palabra in re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", parte).lower().split():
+            if len(palabra) > 2 and palabra not in VACIAS and palabra not in salida:
+                salida.append(palabra)
+    if not salida:
+        salida = [w for w in _normal(termino).split() if len(w) > 2]
+    return salida
+
+
 def _tokens(*textos):
     """Palabras significativas de los nombres dados."""
     salida = set()
@@ -58,23 +70,60 @@ def instantanea(marca="antes", timeout=300):
 
 
 # ------------------------------------------------------------------ búsqueda
-def buscar_programa(termino):
-    """Programas instalados que coincidan con el término (nombre, editor o id)."""
-    foto = instantanea("buscar")
+def puntua(termino, programa):
+    """Puntuación de coincidencia entre el término y un programa (0 = no coincide)."""
     buscado = _normal(termino)
-    palabras = [p for p in buscado.split() if len(p) > 2]
+    palabras = (_palabras_id(termino) if "." in (termino or "")
+                else [p for p in buscado.split() if len(p) > 2])
+    nombre = _normal(programa.get("nombre"))
+    editor = _normal(programa.get("editor"))
+    if not nombre or not buscado:
+        return 0
+    if buscado == nombre:
+        return 100
+    if buscado in nombre or nombre in buscado:
+        return 90
+    # Coincidencia por palabras completas (evita «office» dentro de «libreoffice»)
+    del_nombre = set(nombre.split()) | set(editor.split())
+
+    def contiene(palabra):
+        return any(palabra == otra or otra.startswith(palabra) or palabra.startswith(otra)
+                   for otra in del_nombre if len(otra) > 2)
+
+    if palabras and all(contiene(p) for p in palabras):
+        return 70
+    norte = _normal(programa.get("ubicacion"))
+    if palabras and norte and all(p in norte for p in palabras):
+        return 50
+    return 0
+
+
+def buscar_programa(termino):
+    """Programas instalados que coincidan con el término (nombre, editor o id de winget)."""
+    foto = instantanea("buscar")
     encontrados = []
     for programa in foto.get("programas") or []:
-        nombre = _normal(programa.get("nombre"))
-        editor = _normal(programa.get("editor"))
-        if not nombre:
-            continue
-        if buscado and (buscado in nombre or nombre in buscado):
-            encontrados.append((100, programa))
-        elif palabras and all(p in nombre or p in editor for p in palabras):
-            encontrados.append((70, programa))
+        puntaje = puntua(termino, programa)
+        if puntaje:
+            encontrados.append((puntaje, programa))
     encontrados.sort(key=lambda x: -x[0])
-    return [programa for _, programa in encontrados]
+    if encontrados:
+        return [programa for _, programa in encontrados]
+    # Puede venir como id de winget: preguntar a winget cuál es su nombre de verdad.
+    if "." in (termino or ""):
+        try:
+            from . import instalador
+            rc, salida, _err = instalador._winget(["list", "--id", termino, "--exact"], timeout=120)
+            for linea in (salida or "").splitlines():
+                if termino.lower() in linea.lower():
+                    nombre = linea.split(termino)[0].strip(" -|")
+                    if nombre:
+                        real = buscar_programa(nombre)
+                        if real:
+                            return real
+        except Exception:
+            pass
+    return []
 
 
 # ------------------------------------------------------------------ restos

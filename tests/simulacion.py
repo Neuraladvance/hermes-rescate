@@ -362,6 +362,23 @@ def restos_desinstalacion():
         len(quedan), len(borrables), len(quedan) - len(borrables))
 
 
+def desinstalar_por_id():
+    """El id de winget debe encontrar el programa instalado (no coinciden literalmente)."""
+    from nucleo import desinstalador as d
+    casos = [("Foxit.FoxitReader", "Foxit PDF Reader", True),
+             ("Google.Chrome", "Google Chrome", True),
+             ("Google.Chrome", "Foxit PDF Reader", False),
+             ("Microsoft.Office", "LibreOffice", False)]
+    fallos = []
+    for termino, nombre, esperado in casos:
+        puntaje = d.puntua(termino, {"nombre": nombre, "editor": "", "ubicacion": ""})
+        if bool(puntaje) != esperado:
+            fallos.append("%s vs %s -> %d" % (termino, nombre, puntaje))
+    if fallos:
+        raise AssertionError(" | ".join(fallos))
+    return "id de winget traducido a nombre instalado"
+
+
 # ====================================================================== D. informe
 def informe_se_genera():
     import rescate
@@ -605,6 +622,7 @@ if __name__ == "__main__":
     check("Respuesta solo en «reasoning»", modelo_solo_razonamiento)
     check("Progreso de winget paso a paso", progreso_winget)
     check("Restos de una desinstalación (compartidos a salvo)", restos_desinstalacion)
+    check("Desinstalar por id de winget", desinstalar_por_id)
 
     seccion("B. Catálogo de reparaciones")
     check("Catálogo íntegro", catalogo_completo)
