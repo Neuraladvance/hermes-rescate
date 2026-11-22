@@ -669,8 +669,8 @@ def puerta_disclaimer(automatico=False):
     if os.path.exists(ruta):
         print("  Texto completo: %s" % ruta)
     print()
-    print("  Escribe %s para continuar o %s para salir."
-          % (C.color("S", C.VERDE), C.color("N", C.ROJO)))
+    print("  Escribe %s para continuar o %s para salir: si no aceptas el DISCLAIMER, "
+          "el programa se cierra." % (C.color("S", C.VERDE), C.color("N", C.ROJO)))
     while True:
         try:
             respuesta = input(C.color("  › ", C.NEGRITA)).strip().upper()
